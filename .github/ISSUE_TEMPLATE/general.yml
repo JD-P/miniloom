@@ -1,0 +1,18 @@
+name: General Issue
+description: Something else not covered by the other templates
+title: "[ISSUE] "
+labels: ["question"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe your issue, question, or concern
+    validations:
+      required: true
+  
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Any relevant context or background information
