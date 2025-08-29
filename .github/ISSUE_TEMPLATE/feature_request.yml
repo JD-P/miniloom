@@ -1,0 +1,39 @@
+name: Feature Request
+description: Suggest a new feature or enhancement
+title: "[FEATURE] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a feature! Please describe what you'd like to see.
+  
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or Use Case
+      description: What problem would this feature solve? What's your use case?
+      placeholder: I'm trying to do X but currently...
+    validations:
+      required: true
+  
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: What would you like to happen?
+      placeholder: I'd like miniloom to...
+    validations:
+      required: true
+  
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Any alternative solutions or workarounds you've considered?
+  
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Any other context, mockups, or examples
