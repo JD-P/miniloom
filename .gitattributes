@@ -1,0 +1,9 @@
+# .gitattributes
+* text=auto eol=lf
+
+# binaries / artifacts
+*.png -text
+*.jpg -text
+*.ico -text
+*.icns -text
+dist/** -text

@@ -275,6 +275,22 @@ function createWindow(initialData = null) {
 
     initializeTempFile();
 
+    // Handle window close - intercept to check for unsaved changes
+    window.on("close", async event => {
+      // Prevent the default close behavior
+      event.preventDefault();
+
+      const canClose = await checkUnsavedChanges();
+      if (canClose) {
+        // If user confirmed close, allow the window to close
+        window.destroy();
+        if (window === mainWindow) {
+          mainWindow = null;
+        }
+      }
+      // If user cancelled, the window will remain open
+    });
+
     window.on("closed", function () {
       if (window === mainWindow) {
         mainWindow = null;
@@ -443,6 +459,12 @@ function buildFileMenuItems() {
         mainWindow.webContents.send("invoke-action", "save-file");
       },
     },
+    {
+      label: "Import Loomsidian",
+      click() {
+        mainWindow.webContents.send("invoke-action", "import-loomsidian");
+      },
+    },
     { type: "separator" },
   ];
 
@@ -607,6 +629,48 @@ ipcMain.handle("load-file", async event => {
 
       // Send the data to the renderer
       mainWindow.webContents.send("load-initial-data", { filePath, data });
+    }
+  }
+});
+
+ipcMain.handle("import-loomsidian-file", async event => {
+  await finalAutoSave();
+
+  // Check for unsaved changes first
+  if (await checkUnsavedChanges()) {
+    const { filePaths } = await dialog.showOpenDialog(mainWindow, {
+      title: "Import Loomsidian File",
+      filters: [{ name: "All Files", extensions: ["*"] }],
+      properties: ["openFile"],
+    });
+
+    if (filePaths && filePaths.length > 0) {
+      const filePath = filePaths[0];
+      const content = fs.readFileSync(filePath, "utf8");
+      const data = JSON.parse(content);
+
+      // Validate that this looks like a Loomsidian file
+      if (!data.nodes || typeof data.nodes !== "object") {
+        dialog.showErrorBox(
+          "Invalid File",
+          "This doesn't appear to be a valid Loomsidian export file."
+        );
+        return;
+      }
+
+      // Import as new unsaved loom (don't overwrite the original file)
+      setCurrentFile(null, true); // Mark as temp/unsaved
+      mainWindow.webContents.send(
+        "update-filename",
+        path.basename(filePath, ".json") + " (imported)",
+        new Date(), // Use current time as creation time
+        null, // No file path since it's unsaved
+        true, // Mark as unsaved
+        null // No last saved timestamp
+      );
+
+      // Send the data to the renderer for import processing
+      mainWindow.webContents.send("import-loomsidian-data", { data });
     }
   }
 });
@@ -787,6 +851,19 @@ app
     }
   })
   .then(createWindow);
+
+// Handle app quit - intercept to check for unsaved changes
+app.on("before-quit", async event => {
+  // Prevent the default quit behavior
+  event.preventDefault();
+
+  const canQuit = await checkUnsavedChanges();
+  if (canQuit) {
+    // If user confirmed quit, allow the app to quit
+    app.exit(0);
+  }
+  // If user cancelled, the app will continue running
+});
 
 app.on("window-all-closed", function () {
   if (process.platform !== "darwin") app.quit();

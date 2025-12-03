@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   saveFile: data => ipcRenderer.invoke("save-file", data),
   loadFile: () => ipcRenderer.invoke("load-file"),
   loadRecentFile: filePath => ipcRenderer.invoke("load-recent-file", filePath),
+  importLoomsidianFile: () => ipcRenderer.invoke("import-loomsidian-file"),
   newLoom: () => ipcRenderer.invoke("new-loom"),
   rendererReady: () => ipcRenderer.invoke("renderer-ready"),
   autoSave: data => ipcRenderer.invoke("auto-save", data),
@@ -50,6 +51,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
   onLoadInitialData: callback => {
     ipcRenderer.on("load-initial-data", callback);
     return () => ipcRenderer.removeAllListeners("load-initial-data");
+  },
+
+  onImportLoomsidianData: callback => {
+    ipcRenderer.on("import-loomsidian-data", callback);
+    return () => ipcRenderer.removeAllListeners("import-loomsidian-data");
   },
 
   onResetToNewLoom: callback => {

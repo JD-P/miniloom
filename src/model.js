@@ -11,7 +11,7 @@ const dmp = {
 class Node {
   constructor(id, type, parent, patch, summary) {
     this.id = id;
-    this.type = type; // "root", "user", "gen", "rewrite"
+    this.type = type; // "root", "user", "gen", "rewrite", "import"
     this.parent = parent;
     this.patch = patch;
     this.summary = summary;
@@ -63,7 +63,15 @@ class LoomTree {
     const parentRenderedText = this.applyPatches(parent);
     const patch = dmp.patch_make(parentRenderedText, text);
     const newNodeId = String(Object.keys(this.nodeStore).length + 1);
-    const newNode = new Node(newNodeId, type, parent.id, patch, summary);
+
+    // Generate proper branch summary if summary is empty
+    let finalSummary = summary;
+    if (!summary || summary.trim() === "") {
+      const branchNumber = parent.children.length + 1;
+      finalSummary = `Branch ${branchNumber}`;
+    }
+
+    const newNode = new Node(newNodeId, type, parent.id, patch, finalSummary);
 
     if (newNode.type === "user") {
       newNode.read = true;
@@ -100,7 +108,15 @@ class LoomTree {
     const wasRecent = node.timestamp > fiveMinutesAgo;
 
     node.timestamp = Date.now();
-    node.summary = summary;
+
+    // Generate proper branch summary if summary is empty
+    let finalSummary = summary;
+    if (!summary || summary.trim() === "") {
+      const parent = this.nodeStore[node.parent];
+      const branchNumber = parent.children.indexOf(node.id) + 1;
+      finalSummary = `Branch ${branchNumber}`;
+    }
+    node.summary = finalSummary;
 
     this.updateNodeStats(node, fiveMinutesAgo);
 

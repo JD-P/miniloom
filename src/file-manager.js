@@ -61,6 +61,197 @@ class FileManager {
   }
 
   /**
+   * Import Loomsidian file
+   */
+  async importLoomsidianFile() {
+    try {
+      const data = await window.electronAPI.importLoomsidianFile();
+      if (data) {
+        await this.processImportedLoomsidianData(data);
+      }
+    } catch (err) {
+      console.error("Import Loomsidian File Error:", err);
+    }
+  }
+
+  /**
+   * Process imported Loomsidian data
+   */
+  async processImportedLoomsidianData(loomsidianData) {
+    try {
+      const { loomTree, idMapping } =
+        this.convertLoomsidianToMiniLoom(loomsidianData);
+
+      // Update global state
+      this.appState.loomTree = loomTree;
+
+      // Set focus to the current node from Loomsidian or the Loomsidian root
+      const currentId = loomsidianData.current;
+      const loomsidianRootId = Object.keys(loomsidianData.nodes).find(
+        id => !loomsidianData.nodes[id].parentId
+      );
+      const loomsidianRootMiniLoomId = idMapping[loomsidianRootId];
+
+      const focusedNode =
+        currentId &&
+        idMapping[currentId] &&
+        loomTree.nodeStore[idMapping[currentId]]
+          ? loomTree.nodeStore[idMapping[currentId]]
+          : loomTree.nodeStore[loomsidianRootMiniLoomId];
+
+      this.appState.focusedNode = focusedNode;
+
+      // Ensure the focused node is properly rendered
+      if (this.appState.focusedNode) {
+        this.appState.focusedNode.cachedRenderText = loomTree.renderNode(
+          this.appState.focusedNode
+        );
+      }
+
+      // Update existing services with new data
+      if (this.searchManager) {
+        this.searchManager.updateLoomTree(loomTree);
+        this.searchManager.rebuildIndex();
+      }
+      if (this.treeNav) {
+        this.treeNav.renderTree(loomTree.root, this.DOM.loomTreeView);
+      }
+
+      // Render the new state
+      this.updateUI();
+
+      // Trigger an auto-save to create the temp file
+      await this.autoSave();
+    } catch (error) {
+      console.error("Error in processImportedLoomsidianData:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Convert Loomsidian data to MiniLoom format
+   */
+  convertLoomsidianToMiniLoom(loomsidianData) {
+    const loomTree = new LoomTree();
+
+    // Find the root node (node with parentId: null)
+    const rootNodeId = Object.keys(loomsidianData.nodes).find(
+      id => loomsidianData.nodes[id].parentId === null
+    );
+
+    if (!rootNodeId) {
+      throw new Error("No root node found in Loomsidian data");
+    }
+
+    // Create a mapping from Loomsidian IDs to MiniLoom IDs
+    const idMapping = {};
+    let nextMiniLoomId = 2; // Start from 2 to avoid conflict with MiniLoom root (ID "1")
+
+    // First pass: create all nodes with null parent (will fix in second pass)
+    Object.keys(loomsidianData.nodes).forEach(loomsidianId => {
+      const loomsidianNode = loomsidianData.nodes[loomsidianId];
+      const miniLoomId = String(nextMiniLoomId++);
+      idMapping[loomsidianId] = miniLoomId;
+
+      // Generate simple summary from words 2-5, stripping punctuation but preserving apostrophes
+      const cleanText = loomsidianNode.text.trim().replace(/[^\w\s']/g, " ");
+      const words = cleanText
+        .split(/\s+/)
+        .filter(word => word.length > 0)
+        .slice(1, 5); // Skip first word, take next 4
+      let summary = words.join(" ");
+
+      // If summary is empty, we'll generate a branch number later
+      if (!summary || summary.trim() === "") {
+        summary = ""; // Will be set to Branch X in second pass
+      }
+
+      // Create the node with null parent for now
+      const node = new Node(
+        miniLoomId,
+        "import", // Imported nodes are marked as "import" type
+        null, // Will be set in second pass
+        "", // Will be set below
+        summary
+      );
+
+      // Set additional properties from Loomsidian data
+      node.timestamp = loomsidianNode.lastVisited || Date.now();
+      node.read = !loomsidianNode.unread;
+
+      // Map bookmarked to rating (bookmarked = thumbs up)
+      if (loomsidianNode.bookmarked) {
+        node.rating = true;
+      }
+
+      // Map collapsed to rating (collapsed = thumbs down)
+      if (loomsidianNode.collapsed) {
+        node.rating = false;
+      }
+
+      loomTree.nodeStore[miniLoomId] = node;
+    });
+
+    // Second pass: set up parent relationships
+    Object.keys(loomsidianData.nodes).forEach(loomsidianId => {
+      const loomsidianNode = loomsidianData.nodes[loomsidianId];
+      const miniLoomId = idMapping[loomsidianId];
+      const node = loomTree.nodeStore[miniLoomId];
+
+      if (loomsidianNode.parentId) {
+        const parentId = idMapping[loomsidianNode.parentId];
+        const parent = loomTree.nodeStore[parentId];
+
+        // Set the parent relationship
+        node.parent = parentId;
+
+        // Add this node to parent's children
+        parent.children.push(miniLoomId);
+      } else {
+        // Loomsidian root node becomes a child of MiniLoom root
+        node.parent = loomTree.root.id;
+        loomTree.root.children.push(miniLoomId);
+      }
+    });
+
+    // Third pass: create patches by walking down the tree recursively
+    const createPatchesRecursively = (
+      nodeId,
+      parentText = "",
+      branchIndex = 1
+    ) => {
+      const node = loomTree.nodeStore[nodeId];
+      const loomsidianId = Object.keys(idMapping).find(
+        id => idMapping[id] === nodeId
+      );
+      const loomsidianNode = loomsidianData.nodes[loomsidianId];
+
+      // Generate branch number for empty summaries
+      if (!node.summary || node.summary.trim() === "") {
+        node.summary = `Branch ${branchIndex}`;
+      }
+
+      // Create patch: parent text + this node's text
+      const childFullText = parentText + loomsidianNode.text;
+      node.patch = dmp.patch_make(parentText, childFullText);
+
+      // Process children recursively with the new full text as their parent text
+      node.children.forEach((childId, index) => {
+        createPatchesRecursively(childId, childFullText, index + 1);
+      });
+    };
+
+    // Start patch creation from the Loomsidian root node
+    createPatchesRecursively(idMapping[rootNodeId]);
+
+    // Calculate all node stats starting from the MiniLoom root
+    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+    loomTree.calculateAllNodeStats(loomTree.root, fiveMinutesAgo);
+
+    return { loomTree, idMapping };
+  }
+
+  /**
    * Load and process file data
    */
   async loadFileData(data) {
@@ -210,6 +401,9 @@ class FileManager {
             this.loadRecentFile(args[0]);
           }
           break;
+        case "import-loomsidian":
+          this.importLoomsidianFile();
+          break;
         case "new-loom":
           window.electronAPI.newLoom();
           break;
@@ -225,6 +419,17 @@ class FileManager {
         }
       } catch (error) {
         console.error("Error loading initial data:", error);
+        console.error("Error stack:", error.stack);
+      }
+    });
+
+    window.electronAPI.onImportLoomsidianData(async (event, importData) => {
+      try {
+        if (importData && importData.data) {
+          await this.processImportedLoomsidianData(importData.data);
+        }
+      } catch (error) {
+        console.error("Error importing Loomsidian data:", error);
         console.error("Error stack:", error.stack);
       }
     });

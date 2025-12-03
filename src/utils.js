@@ -260,6 +260,30 @@ function getFinishReasonDisplayText(finishReason) {
   return reasonMap[finishReason] || finishReason || "Unknown";
 }
 
+/**
+ * Get standardized display text for node summary with consistent fallback logic
+ * @param {string} summary - The node summary
+ * @param {number} index - The node index for fallback (optional)
+ * @param {string} defaultText - Default text when summary is empty (optional, defaults to "Branch")
+ * @returns {string} - Standardized display text
+ */
+function getNodeSummaryDisplayText(
+  summary,
+  index = null,
+  defaultText = "Branch"
+) {
+  const trimmedSummary = (summary || "").trim();
+  if (trimmedSummary) {
+    return trimmedSummary;
+  }
+
+  if (index !== null) {
+    return `Branch ${index}`;
+  }
+
+  return defaultText;
+}
+
 if (typeof window !== "undefined") {
   window.utils = {
     validateFieldStringType,
@@ -278,5 +302,6 @@ if (typeof window !== "undefined") {
     getNetChangeClass,
     generateSubtreeTooltipText,
     getFinishReasonDisplayText,
+    getNodeSummaryDisplayText,
   };
 }

@@ -356,8 +356,9 @@ class LLMService {
   }
 
   // Configuration and parameter management
-  prepareGenerationParams() {
-    const settings = this.settingsProvider.getSamplerSettings();
+  prepareGenerationParams(capturedSettings = null) {
+    const settings =
+      capturedSettings || this.settingsProvider.getSamplerSettings();
     const samplerSettingsStore =
       this.settingsProvider.getSamplerSettingsStore();
 
@@ -417,13 +418,13 @@ class LLMService {
     return HTTPClient.makeRequest(finalEndpoint, { body: params });
   }
 
-  async generateSummary(taskText) {
+  async generateSummary(taskText, capturedSettings = null) {
     if (!taskText || typeof taskText !== "string") {
       console.warn("generateSummary called with invalid taskText:", taskText);
-      return "Summary Not Available";
+      return "Branch Error";
     }
 
-    const params = this.prepareGenerationParams();
+    const params = this.prepareGenerationParams(capturedSettings);
     const endpoint = params.apiUrl;
 
     const summarizePromptTemplate =
@@ -471,27 +472,35 @@ class LLMService {
         return window.utils.extractThreeWords(response[0].text);
       } catch (error) {
         console.warn("Summary generation failed:", error);
-        return "Summary Failed";
+        return "Branch Error";
       }
     } else {
-      return "Summary Not Available";
+      return "Branch Error";
     }
   }
 
   // Main generation entry point - now directly maps to provider methods
   async generateNewResponses(nodeId) {
-    const params = this.prepareGenerationParams();
+    // Capture settings at the start of generation to ensure consistency
+    const capturedSettings = this.settingsProvider.getSamplerSettings();
+    const params = this.prepareGenerationParams(capturedSettings);
     const samplingMethod = params.samplingMethod;
 
     // Direct method mapping - names now match settings dropdown exactly
     const methodMap = {
-      base: () => this.generateWithProvider(nodeId, "base"),
-      openai: () => this.generateWithProvider(nodeId, "openai"),
-      "openai-chat": () => this.generateWithOpenAIChat(nodeId),
-      openrouter: () => this.generateWithProvider(nodeId, "openrouter"),
-      together: () => this.generateWithProvider(nodeId, "together"),
-      anthropic: () => this.generateWithProvider(nodeId, "anthropic"),
-      google: () => this.generateWithProvider(nodeId, "google"),
+      base: () => this.generateWithProvider(nodeId, "base", capturedSettings),
+      openai: () =>
+        this.generateWithProvider(nodeId, "openai", capturedSettings),
+      "openai-chat": () =>
+        this.generateWithOpenAIChat(nodeId, capturedSettings),
+      openrouter: () =>
+        this.generateWithProvider(nodeId, "openrouter", capturedSettings),
+      together: () =>
+        this.generateWithProvider(nodeId, "together", capturedSettings),
+      anthropic: () =>
+        this.generateWithProvider(nodeId, "anthropic", capturedSettings),
+      google: () =>
+        this.generateWithProvider(nodeId, "google", capturedSettings),
     };
 
     const method = methodMap[samplingMethod] || methodMap["base"];
@@ -499,63 +508,72 @@ class LLMService {
   }
 
   // Unified generation method for most providers
-  async generateWithProvider(nodeId, providerType) {
-    await this.executeGeneration(nodeId, async () => {
-      const params = this.prepareGenerationParams();
-      const prompt = this.dataProvider.getCurrentPrompt();
+  async generateWithProvider(nodeId, providerType, capturedSettings = null) {
+    await this.executeGeneration(
+      nodeId,
+      async () => {
+        const params = this.prepareGenerationParams(capturedSettings);
+        const prompt = this.dataProvider.getCurrentPrompt();
 
-      const providerParams = {
-        apiKey: params.apiKey,
-        modelName: params.modelName,
-        outputBranches: params.outputBranches,
-        tokensPerBranch: params.tokensPerBranch,
-        temperature: params.temperature,
-        topP: params.topP,
-        topK: params.topK,
-        repetitionPenalty: params.repetitionPenalty,
-        delay: params.apiDelay,
-      };
+        const providerParams = {
+          apiKey: params.apiKey,
+          modelName: params.modelName,
+          outputBranches: params.outputBranches,
+          tokensPerBranch: params.tokensPerBranch,
+          temperature: params.temperature,
+          topP: params.topP,
+          topK: params.topK,
+          repetitionPenalty: params.repetitionPenalty,
+          delay: params.apiDelay,
+        };
 
-      const newResponses = await APIClient.callProvider(
-        providerType,
-        params.apiUrl,
-        prompt,
-        providerParams
-      );
+        const newResponses = await APIClient.callProvider(
+          providerType,
+          params.apiUrl,
+          prompt,
+          providerParams
+        );
 
-      return newResponses;
-    });
+        return newResponses;
+      },
+      capturedSettings
+    );
   }
 
-  async generateWithOpenAIChat(nodeId) {
-    await this.executeGeneration(nodeId, async () => {
-      const params = this.prepareGenerationParams();
-      const loomTree = this.dataProvider.getLoomTree();
-      const rollFocus = loomTree.nodeStore[nodeId];
-      const promptText = loomTree.renderNode(rollFocus);
+  async generateWithOpenAIChat(nodeId, capturedSettings = null) {
+    await this.executeGeneration(
+      nodeId,
+      async () => {
+        const params = this.prepareGenerationParams(capturedSettings);
+        const loomTree = this.dataProvider.getLoomTree();
+        const rollFocus = loomTree.nodeStore[nodeId];
+        const promptText = loomTree.renderNode(rollFocus);
 
-      const chatData = this.parseChatData(promptText);
-      const requestBody = this.buildChatRequestBody(chatData, params);
-      const headers = this.buildChatRequestHeaders(params);
+        const chatData = this.parseChatData(promptText);
+        const requestBody = this.buildChatRequestBody(chatData, params);
+        const headers = this.buildChatRequestHeaders(params);
 
-      const responseData = await HTTPClient.makeRequest(params.apiUrl, {
-        headers,
-        body: requestBody,
-      });
+        const responseData = await HTTPClient.makeRequest(params.apiUrl, {
+          headers,
+          body: requestBody,
+        });
 
-      await this.processChatResponses(
-        responseData,
-        chatData,
-        rollFocus,
-        this.getLastChildIndex(rollFocus)
-      );
+        await this.processChatResponses(
+          responseData,
+          chatData,
+          rollFocus,
+          this.getLastChildIndex(rollFocus),
+          capturedSettings
+        );
 
-      return []; // Chat responses are processed separately
-    });
+        return []; // Chat responses are processed separately
+      },
+      capturedSettings
+    );
   }
 
   // Common generation execution pattern
-  async executeGeneration(nodeId, generationFunction) {
+  async executeGeneration(nodeId, generationFunction, capturedSettings = null) {
     if (this.eventHandlers.onGenerationStarted) {
       this.eventHandlers.onGenerationStarted(nodeId);
     }
@@ -574,7 +592,8 @@ class LLMService {
           newResponses,
           rollFocus,
           lastChildIndex,
-          this.prepareGenerationParams().apiDelay
+          this.prepareGenerationParams(capturedSettings).apiDelay,
+          capturedSettings
         );
       }
 
@@ -594,7 +613,13 @@ class LLMService {
   }
 
   // Response processing
-  async processResponses(newResponses, rollFocus, lastChildIndex, apiDelay) {
+  async processResponses(
+    newResponses,
+    rollFocus,
+    lastChildIndex,
+    apiDelay,
+    capturedSettings = null
+  ) {
     const loomTree = this.dataProvider.getLoomTree();
 
     if (!Array.isArray(newResponses) || newResponses.length === 0) {
@@ -622,10 +647,10 @@ class LLMService {
 
       let responseSummary;
       if (hasNoContent && isFinished) {
-        responseSummary = "Text Complete";
+        responseSummary = "Branch Complete";
       } else {
         responseSummary = await HTTPClient.delay(apiDelay).then(() => {
-          return this.generateSummary(response.text);
+          return this.generateSummary(response.text, capturedSettings);
         });
       }
 
@@ -662,7 +687,8 @@ class LLMService {
     responseData,
     chatData,
     rollFocus,
-    lastChildIndex
+    lastChildIndex,
+    capturedSettings = null
   ) {
     const loomTree = this.dataProvider.getLoomTree();
 
@@ -688,10 +714,11 @@ class LLMService {
 
       let summary;
       if (hasNoContent && isFinished) {
-        summary = "Text Complete";
+        summary = "Branch Complete";
       } else {
         summary = await this.generateSummary(
-          assistantMessage.content || "Assistant response"
+          assistantMessage.content || "Assistant response",
+          capturedSettings
         );
       }
 

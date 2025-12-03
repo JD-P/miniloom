@@ -3,7 +3,6 @@ class AppState {
     this.loomTree = new LoomTree();
     this.focusedNode = this.loomTree.root;
     this.samplerSettingsStore = {};
-    this.updatingNode = false; // lock to prevent generating multiple summaries at once
     this.secondsSinceLastSave = 0;
   }
 
@@ -171,10 +170,21 @@ function updateTreeStatsDisplay() {
 function updateFocusedNodeStats() {
   const focusedNode = appState.focusedNode;
 
-  DOM.nodeSummary.textContent = focusedNode.summary || "Unsaved";
+  DOM.nodeSummary.textContent = window.utils.getNodeSummaryDisplayText(
+    focusedNode.summary
+  );
   DOM.nodeAuthor.textContent =
-    focusedNode.type === "user" ? "Human" : focusedNode.model || "Unknown";
-  DOM.nodeAuthorEmoji.textContent = focusedNode.type === "gen" ? "🤖" : "👤";
+    focusedNode.type === "user"
+      ? "Human"
+      : focusedNode.type === "import"
+        ? "Imported"
+        : focusedNode.model || "Unknown";
+  DOM.nodeAuthorEmoji.textContent =
+    focusedNode.type === "gen"
+      ? "🤖"
+      : focusedNode.type === "import"
+        ? "📥"
+        : "👤";
   DOM.nodePosition.innerHTML = `<strong>📍 ${focusedNode.id}:&nbsp</strong>`;
 
   // Update timestamp
@@ -324,10 +334,9 @@ function setupEditorHandlers() {
     // Update user node content while typing
     if (
       appState.focusedNode.children.length === 0 &&
-      appState.focusedNode.type === "user" &&
-      !appState.updatingNode
+      (appState.focusedNode.type === "user" ||
+        appState.focusedNode.type === "import")
     ) {
-      appState.updatingNode = true;
       appState.loomTree.updateNode(
         appState.focusedNode,
         prompt,
@@ -335,8 +344,6 @@ function setupEditorHandlers() {
       );
 
       updateSearchIndexForNode(appState.focusedNode);
-
-      appState.updatingNode = false;
     }
 
     // Update character/word count on every keystroke
@@ -346,21 +353,17 @@ function setupEditorHandlers() {
     if (prompt.length % 32 === 0) {
       if (
         appState.focusedNode.children.length === 0 &&
-        appState.focusedNode.type === "user" &&
-        ["base"].includes(params["sampling-method"]) &&
-        !appState.updatingNode
+        (appState.focusedNode.type === "user" ||
+          appState.focusedNode.type === "import") &&
+        ["base"].includes(params["sampling-method"])
       ) {
         try {
-          appState.updatingNode = true;
           const summary = await llmService.generateSummary(prompt);
           appState.loomTree.updateNode(appState.focusedNode, prompt, summary);
 
           updateSearchIndexForNode(appState.focusedNode);
-
-          appState.updatingNode = false;
         } catch (error) {
           console.error("Summary generation error:", error);
-          appState.updatingNode = false;
         }
       }
       if (treeNav) {
@@ -472,33 +475,27 @@ var treeStatsRecalcIntervalId = setInterval(treeStatsRecalcTick, 60000); // Ever
  */
 async function updateFocusSummary() {
   if (
-    appState.focusedNode.type === "user" &&
-    appState.focusedNode.children.length === 0 &&
-    !appState.updatingNode
+    (appState.focusedNode.type === "user" ||
+      appState.focusedNode.type === "import") &&
+    appState.focusedNode.children.length === 0
   ) {
     const currentFocus = appState.focusedNode;
     const newPrompt = DOM.editor.value;
     const prompt = appState.loomTree.renderNode(currentFocus);
 
-    appState.updatingNode = true;
     try {
       let summary = await llmService.generateSummary(prompt);
       if (summary.trim() === "") {
-        summary = "Summary Not Given";
+        summary = "Branch Empty";
       }
       appState.loomTree.updateNode(currentFocus, newPrompt, summary);
 
       updateSearchIndexForNode(currentFocus);
     } catch (error) {
-      appState.loomTree.updateNode(
-        currentFocus,
-        newPrompt,
-        "Server Response Error"
-      );
+      appState.loomTree.updateNode(currentFocus, newPrompt, "Branch Error");
 
       updateSearchIndexForNode(currentFocus);
     }
-    appState.updatingNode = false;
   }
 }
 

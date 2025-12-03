@@ -170,7 +170,10 @@ class TreeNav {
       return link;
     }
 
-    const displayText = (node.summary || "").trim() || `Option ${index}`;
+    const displayText = window.utils.getNodeSummaryDisplayText(
+      node.summary,
+      index
+    );
 
     const statusSpan = this.createStatusSpan(node);
     const ratingSpan = this.createRatingSpan(node);

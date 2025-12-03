@@ -70,7 +70,7 @@ class SearchManager {
       window.electronAPI.searchIndexAdd({
         id: node.id,
         content: patchContent,
-        summary: node.summary || "",
+        summary: window.utils.getNodeSummaryDisplayText(node.summary),
         type: node.type,
         timestamp: node.timestamp,
         fullContent: fullText,
@@ -132,7 +132,7 @@ class SearchManager {
             query
           ),
           highlightedSummary: window.utils.highlightText(
-            result.summary || "",
+            window.utils.getNodeSummaryDisplayText(result.summary),
             query
           ),
         };
@@ -168,7 +168,7 @@ class SearchManager {
 
       const header = document.createElement("div");
       header.className = "search-result-header";
-      header.innerHTML = `📍 ${result.node.id}: ${result.highlightedSummary || result.node.summary}`;
+      header.innerHTML = `📍 ${result.node.id}: ${result.highlightedSummary || window.utils.getNodeSummaryDisplayText(result.node.summary)}`;
 
       const content = document.createElement("div");
       content.className = "search-result-content";
@@ -182,9 +182,18 @@ class SearchManager {
       const formattedDate = window.utils.formatTimestamp(result.node.timestamp);
 
       // Get author info
-      const authorEmoji = result.node.type === "gen" ? "🤖" : "👤";
+      const authorEmoji =
+        result.node.type === "gen"
+          ? "🤖"
+          : result.node.type === "import"
+            ? "📥"
+            : "👤";
       const authorName =
-        result.node.type === "user" ? "Human" : result.node.model || "Unknown";
+        result.node.type === "user"
+          ? "Human"
+          : result.node.type === "import"
+            ? "Imported"
+            : result.node.model || "Unknown";
 
       // Add rating indicators
       let ratingHtml = "";
@@ -305,7 +314,7 @@ class SearchManager {
       window.electronAPI.searchIndexReplace({
         id: node.id,
         content: this.extractPatchContent(node.patch),
-        summary: node.summary || "",
+        summary: window.utils.getNodeSummaryDisplayText(node.summary),
         type: node.type,
         timestamp: node.timestamp,
         fullContent: fullText,
