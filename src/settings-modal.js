@@ -28,6 +28,12 @@ const SERVICE_DEFAULTS = {
     "service-model-name": "deepseek/deepseek-v3-base:free",
     "service-api-delay": "3000",
   },
+  "openrouter-chat": {
+    "sampling-method": "openrouter-chat",
+    "service-api-url": "https://openrouter.ai/api/v1/chat/completions",
+    "service-model-name": "deepseek/deepseek-v3-base:free",
+    "service-api-delay": "3000",
+  },
   openai: {
     "sampling-method": "openai",
     "service-api-url": "https://api.openai.com/v1/completions",

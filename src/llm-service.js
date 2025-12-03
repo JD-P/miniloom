@@ -75,6 +75,8 @@ class APIClient {
         return this.openaiChatProvider(endpoint, prompt, params);
       case "openrouter":
         return this.openrouterProvider(endpoint, prompt, params);
+      case "openrouter-chat":
+        return this.openrouterChatProvider(endpoint, prompt, params);
       case "together":
         return this.togetherProvider(endpoint, prompt, params);
       case "anthropic":
@@ -193,6 +195,56 @@ class APIClient {
         .then(responseJson => {
           return responseJson.choices.map(choice => ({
             text: choice.text,
+            model: responseJson.model,
+            finish_reason: choice.finish_reason,
+          }));
+        });
+
+      batchPromises.push(promise);
+    }
+
+    const batch = await Promise.all(batchPromises);
+    return batch.flat();
+  }
+
+  static async openrouterChatProvider(endpoint, prompt, params) {
+    const authToken = `Bearer ${params.apiKey}`;
+    const apiDelay = Number(params.delay || 0);
+
+    const batchPromises = [];
+    const calls = params.outputBranches || 1;
+
+    // Use messages from params if available, otherwise create from prompt
+    const messages = params.messages || [{ role: "user", content: prompt }];
+
+    for (let i = 1; i <= calls; i++) {
+      const body = {
+        model: params.modelName,
+        messages: messages,
+        max_tokens: Number(params.tokensPerBranch),
+        temperature: Number(params.temperature),
+        top_p: Number(params.topP),
+        top_k: Number(params.topK),
+        repetition_penalty: Number(params.repetitionPenalty),
+      };
+
+      const promise = HTTPClient.delay(apiDelay * i)
+        .then(() => {
+          const headers = {
+            accept: "application/json",
+            Authorization: authToken,
+            "HTTP-Referer": "https://github.com/JD-P/miniloom",
+            "X-Title": "MiniLoom",
+          };
+
+          return HTTPClient.makeRequest(endpoint, {
+            headers,
+            body,
+          });
+        })
+        .then(responseJson => {
+          return responseJson.choices.map(choice => ({
+            text: choice.message.content,
             model: responseJson.model,
             finish_reason: choice.finish_reason,
           }));
@@ -450,6 +502,7 @@ class LLMService {
         "openai",
         "openai-chat",
         "openrouter",
+        "openrouter-chat",
         "together",
         "anthropic",
         "google",
@@ -495,6 +548,8 @@ class LLMService {
         this.generateWithOpenAIChat(nodeId, capturedSettings),
       openrouter: () =>
         this.generateWithProvider(nodeId, "openrouter", capturedSettings),
+      "openrouter-chat": () =>
+        this.generateWithOpenRouterChat(nodeId, capturedSettings),
       together: () =>
         this.generateWithProvider(nodeId, "together", capturedSettings),
       anthropic: () =>
@@ -565,6 +620,70 @@ class LLMService {
           this.getLastChildIndex(rollFocus),
           capturedSettings
         );
+
+        return []; // Chat responses are processed separately
+      },
+      capturedSettings
+    );
+  }
+
+  async generateWithOpenRouterChat(nodeId, capturedSettings = null) {
+    await this.executeGeneration(
+      nodeId,
+      async () => {
+        const params = this.prepareGenerationParams(capturedSettings);
+        const loomTree = this.dataProvider.getLoomTree();
+        const rollFocus = loomTree.nodeStore[nodeId];
+        const promptText = loomTree.renderNode(rollFocus);
+
+        const chatData = this.parseChatData(promptText);
+        const authToken = `Bearer ${params.apiKey}`;
+        const apiDelay = Number(params.apiDelay || 0);
+
+        const batchPromises = [];
+        const calls = params.outputBranches;
+
+        for (let i = 1; i <= calls; i++) {
+          const body = {
+            model: params.modelName,
+            messages: chatData.messages,
+            max_tokens: Number(params.tokensPerBranch),
+            temperature: Number(params.temperature),
+            top_p: Number(params.topP),
+            top_k: Number(params.topK),
+            repetition_penalty: Number(params.repetitionPenalty),
+          };
+
+          const promise = HTTPClient.delay(apiDelay * i)
+            .then(() => {
+              const headers = {
+                accept: "application/json",
+                Authorization: authToken,
+                "HTTP-Referer": "https://github.com/JD-P/miniloom",
+                "X-Title": "MiniLoom",
+              };
+
+              return HTTPClient.makeRequest(params.apiUrl, {
+                headers,
+                body,
+              });
+            });
+
+          batchPromises.push(promise);
+        }
+
+        const responses = await Promise.all(batchPromises);
+        
+        // Process all responses
+        for (const responseData of responses) {
+          await this.processChatResponses(
+            responseData,
+            chatData,
+            rollFocus,
+            this.getLastChildIndex(rollFocus),
+            capturedSettings
+          );
+        }
 
         return []; // Chat responses are processed separately
       },

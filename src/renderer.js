@@ -68,6 +68,12 @@ const DOM = {
   editorWordChange: document.getElementById("editor-word-change"),
   editorCharCount: document.getElementById("editor-char-count"),
   editorCharChange: document.getElementById("editor-char-change"),
+  chatToggleContainer: document.getElementById("chat-toggle-container"),
+  chatToggle: document.getElementById("chat-toggle"),
+  chatView: document.getElementById("chat-view"),
+  chatMessages: document.getElementById("chat-messages"),
+  chatInput: document.getElementById("chat-input"),
+  chatSendButton: document.getElementById("chat-send-button"),
 };
 
 /*
@@ -96,6 +102,202 @@ function updateFocus(nodeId, reason = "unknown") {
   }
 }
 
+// Chat view state
+let chatViewMode = "text"; // "text" or "chat"
+
+function isChatCompletionMethod() {
+  if (!llmService) return false;
+  try {
+    const params = llmService.prepareGenerationParams();
+    return params.samplingMethod === "openai-chat" || params.samplingMethod === "openrouter-chat";
+  } catch (error) {
+    return false;
+  }
+}
+
+function updateChatToggleVisibility() {
+  const isChatMethod = isChatCompletionMethod();
+  if (DOM.chatToggleContainer) {
+    DOM.chatToggleContainer.style.display = isChatMethod ? "flex" : "none";
+  }
+  if (!isChatMethod && chatViewMode === "chat") {
+    chatViewMode = "text";
+    updateViewMode();
+  }
+}
+
+function updateViewMode() {
+  // Save any pending chat edits before switching
+  if (chatViewMode === "chat") {
+    updateChatMLFromUI();
+  }
+  
+  if (chatViewMode === "chat") {
+    DOM.editor.style.display = "none";
+    DOM.chatView.style.display = "flex";
+    renderChatView();
+  } else {
+    DOM.editor.style.display = "block";
+    DOM.chatView.style.display = "none";
+  }
+}
+
+function validateChatML(text) {
+  try {
+    const data = JSON.parse(text);
+    if (!data.messages || !Array.isArray(data.messages)) {
+      return { valid: false, error: "ChatML must have a 'messages' array" };
+    }
+    for (const msg of data.messages) {
+      if (!msg.role || !msg.content) {
+        return { valid: false, error: "Each message must have 'role' and 'content' fields" };
+      }
+      if (!["user", "assistant", "system"].includes(msg.role)) {
+        return { valid: false, error: `Invalid role: ${msg.role}. Must be 'user', 'assistant', or 'system'` };
+      }
+    }
+    return { valid: true };
+  } catch (error) {
+    return { valid: false, error: `Invalid JSON: ${error.message}` };
+  }
+}
+
+function parseChatML(text) {
+  try {
+    const data = JSON.parse(text);
+    if (data.messages && Array.isArray(data.messages)) {
+      return data.messages;
+    }
+    // Fallback: treat as single user message
+    return [{ role: "user", content: text.trim() }];
+  } catch (error) {
+    // Fallback: treat as single user message
+    return [{ role: "user", content: text.trim() }];
+  }
+}
+
+function renderChatView() {
+  if (!appState.focusedNode) return;
+  
+  const text = appState.focusedNode.cachedRenderText;
+  const messages = parseChatML(text);
+  
+  DOM.chatMessages.innerHTML = "";
+  
+  messages.forEach((msg, index) => {
+    const messageDiv = document.createElement("div");
+    messageDiv.className = `chat-message ${msg.role}`;
+    messageDiv.dataset.messageIndex = index;
+    
+    const header = document.createElement("div");
+    header.className = "chat-message-header";
+    header.textContent = msg.role === "user" ? "User" : msg.role === "assistant" ? "AI Assistant" : "System";
+    
+    const content = document.createElement("div");
+    content.className = "chat-message-content";
+    content.textContent = msg.content || "";
+    content.contentEditable = "true";
+    content.dataset.messageIndex = index;
+    content.dataset.messageRole = msg.role;
+    
+    // Handle content editing
+    content.addEventListener("blur", () => {
+      updateChatMLFromUI();
+    });
+    
+    content.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        content.blur();
+      }
+    });
+    
+    messageDiv.appendChild(header);
+    messageDiv.appendChild(content);
+    DOM.chatMessages.appendChild(messageDiv);
+  });
+  
+  // Scroll to bottom
+  DOM.chatMessages.scrollTop = DOM.chatMessages.scrollHeight;
+}
+
+function updateChatMLFromUI() {
+  if (!appState.focusedNode) return;
+  
+  const messages = [];
+  const messageElements = DOM.chatMessages.querySelectorAll(".chat-message");
+  
+  messageElements.forEach((msgEl) => {
+    const contentEl = msgEl.querySelector(".chat-message-content");
+    const role = contentEl.dataset.messageRole;
+    const content = contentEl.textContent.trim();
+    
+    if (content) {
+      messages.push({ role, content });
+    }
+  });
+  
+  const chatML = JSON.stringify({ messages }, null, 2);
+  
+  // Update the node
+  appState.loomTree.updateNode(
+    appState.focusedNode,
+    chatML,
+    appState.focusedNode.summary
+  );
+  
+  // Update editor value to keep in sync
+  DOM.editor.value = chatML;
+  
+  // Update search index
+  if (searchManager) {
+    searchManager.updateNode(appState.focusedNode, appState.loomTree.renderNode(appState.focusedNode));
+  }
+  
+  // Update stats
+  updateTreeStatsDisplay();
+}
+
+function sendChatMessage() {
+  const inputText = DOM.chatInput.value.trim();
+  if (!inputText) return;
+  
+  if (!appState.focusedNode) return;
+  
+  const currentText = appState.focusedNode.cachedRenderText;
+  const messages = parseChatML(currentText);
+  
+  // Add new user message
+  messages.push({ role: "user", content: inputText });
+  
+  const chatML = JSON.stringify({ messages }, null, 2);
+  
+  // Update the node
+  appState.loomTree.updateNode(
+    appState.focusedNode,
+    chatML,
+    appState.focusedNode.summary
+  );
+  
+  // Update editor value to keep in sync
+  DOM.editor.value = chatML;
+  
+  // Clear input
+  DOM.chatInput.value = "";
+  DOM.chatInput.style.height = "auto";
+  
+  // Re-render chat view
+  renderChatView();
+  
+  // Update search index
+  if (searchManager) {
+    searchManager.updateNode(appState.focusedNode, appState.loomTree.renderNode(appState.focusedNode));
+  }
+  
+  // Update stats
+  updateTreeStatsDisplay();
+}
+
 function updateUI() {
   if (!appState.focusedNode) {
     console.warn("No focused node to render");
@@ -108,6 +310,11 @@ function updateUI() {
   updateFocusedNodeStats();
   updateThumbState();
   updateErrorDisplay();
+  updateChatToggleVisibility();
+  
+  if (chatViewMode === "chat") {
+    renderChatView();
+  }
 
   if (treeNav) {
     treeNav.updateTreeView();
@@ -306,6 +513,11 @@ function setupEditorHandlers() {
   DOM.editor.addEventListener("input", async e => {
     const prompt = DOM.editor.value;
 
+    // If in chat mode, update chat view
+    if (chatViewMode === "chat") {
+      renderChatView();
+    }
+
     // Auto-save user work when writing next prompt
     if (
       appState.focusedNode.children.length > 0 ||
@@ -408,6 +620,7 @@ const onSettingsUpdated = async () => {
       populateSamplerSelector();
       populateApiKeySelector();
       renderFavoritesButtons();
+      updateChatToggleVisibility();
     }
   } catch (err) {
     console.error("Load Settings Error:", err);
@@ -704,9 +917,60 @@ async function init() {
     if (DOM.generateButton) {
       DOM.generateButton.onclick = () => {
         if (llmService && appState.focusedNode) {
+          // Validate ChatML if in chat mode
+          if (chatViewMode === "chat" && isChatCompletionMethod()) {
+            const validation = validateChatML(DOM.editor.value);
+            if (!validation.valid) {
+              alert(`Invalid ChatML: ${validation.error}`);
+              return;
+            }
+          }
           llmService.generateNewResponses(appState.focusedNode.id);
         }
       };
+    }
+
+    // Chat toggle handlers
+    if (DOM.chatToggle) {
+      const toggleOptions = DOM.chatToggle.querySelectorAll(".toggle-option");
+      toggleOptions.forEach(option => {
+        option.addEventListener("click", () => {
+          const mode = option.dataset.mode;
+          chatViewMode = mode;
+          toggleOptions.forEach(opt => opt.classList.remove("active"));
+          option.classList.add("active");
+          updateViewMode();
+        });
+      });
+    }
+
+    // Chat send button handler
+    if (DOM.chatSendButton) {
+      DOM.chatSendButton.addEventListener("click", sendChatMessage);
+    }
+
+    // Chat input handlers
+    if (DOM.chatInput) {
+      DOM.chatInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          sendChatMessage();
+        }
+      });
+      
+      // Auto-resize textarea
+      DOM.chatInput.addEventListener("input", () => {
+        DOM.chatInput.style.height = "auto";
+        DOM.chatInput.style.height = Math.min(DOM.chatInput.scrollHeight, 120) + "px";
+      });
+    }
+
+    // Update chat toggle visibility when service/sampler changes
+    if (DOM.serviceSelector) {
+      DOM.serviceSelector.addEventListener("change", updateChatToggleVisibility);
+    }
+    if (DOM.samplerSelector) {
+      DOM.samplerSelector.addEventListener("change", updateChatToggleVisibility);
     }
 
     // Tree stats tooltip handlers

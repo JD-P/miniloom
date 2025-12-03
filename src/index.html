@@ -48,6 +48,18 @@
             class="editor"
             placeholder="Your prompt goes here."
           ></textarea>
+          <div id="chat-view" class="chat-view" style="display: none;">
+            <div id="chat-messages" class="chat-messages"></div>
+            <div id="chat-input-container" class="chat-input-container">
+              <textarea
+                id="chat-input"
+                class="chat-input"
+                placeholder="Type your message..."
+                rows="1"
+              ></textarea>
+              <button id="chat-send-button" class="chat-send-button">Send</button>
+            </div>
+          </div>
           <div id="editor-footer" class="editor-footer">
             <div id="editor-stats" class="editor-stats">
               <span title="Word count"
@@ -64,6 +76,12 @@
                 >
                 chars</span
               >
+            </div>
+            <div id="chat-toggle-container" class="chat-toggle-container" style="display: none;">
+              <div id="chat-toggle" class="chat-toggle">
+                <span class="toggle-option" data-mode="text">Text</span>
+                <span class="toggle-option active" data-mode="chat">Chat</span>
+              </div>
             </div>
           </div>
         </div>
