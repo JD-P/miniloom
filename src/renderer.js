@@ -74,6 +74,7 @@ const DOM = {
   chatMessages: document.getElementById("chat-messages"),
   chatInput: document.getElementById("chat-input"),
   chatSendButton: document.getElementById("chat-send-button"),
+  chatRoleToggle: document.getElementById("chat-role-toggle"),
 };
 
 /*
@@ -104,6 +105,7 @@ function updateFocus(nodeId, reason = "unknown") {
 
 // Chat view state
 let chatViewMode = "text"; // "text" or "chat"
+let chatInputRole = "user"; // "user" or "assistant"
 
 function isChatCompletionMethod() {
   if (!llmService) return false;
@@ -267,8 +269,8 @@ function sendChatMessage() {
   const currentText = appState.focusedNode.cachedRenderText;
   const messages = parseChatML(currentText);
   
-  // Add new user message
-  messages.push({ role: "user", content: inputText });
+  // Add new message with the selected role
+  messages.push({ role: chatInputRole, content: inputText });
   
   const chatML = JSON.stringify({ messages }, null, 2);
   
@@ -296,6 +298,16 @@ function sendChatMessage() {
   
   // Update stats
   updateTreeStatsDisplay();
+}
+
+function updateChatRoleToggle() {
+  if (!DOM.chatRoleToggle) return;
+  
+  if (chatInputRole === "assistant") {
+    DOM.chatRoleToggle.classList.add("assistant-mode");
+  } else {
+    DOM.chatRoleToggle.classList.remove("assistant-mode");
+  }
 }
 
 function updateUI() {
@@ -947,6 +959,15 @@ async function init() {
     // Chat send button handler
     if (DOM.chatSendButton) {
       DOM.chatSendButton.addEventListener("click", sendChatMessage);
+    }
+
+    // Chat role toggle handler
+    if (DOM.chatRoleToggle) {
+      DOM.chatRoleToggle.addEventListener("click", () => {
+        chatInputRole = chatInputRole === "user" ? "assistant" : "user";
+        updateChatRoleToggle();
+      });
+      updateChatRoleToggle();
     }
 
     // Chat input handlers

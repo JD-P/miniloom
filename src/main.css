@@ -510,6 +510,77 @@ select {
   align-items: flex-end;
 }
 
+.chat-role-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.chat-role-toggle:hover {
+  border-color: var(--border-hover);
+  background-color: var(--bg-hover);
+}
+
+.chat-role-toggle.assistant-mode {
+  background-color: rgba(213, 4, 2, 0.1);
+  border-color: var(--engineering-orange);
+}
+
+.role-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  min-width: 45px;
+  text-align: center;
+}
+
+.chat-role-toggle.assistant-mode .role-label:last-child {
+  color: var(--engineering-orange);
+  font-weight: 600;
+}
+
+.chat-role-toggle:not(.assistant-mode) .role-label:first-child {
+  color: var(--engineering-orange);
+  font-weight: 600;
+}
+
+.role-switch {
+  width: 36px;
+  height: 20px;
+  background-color: #d0d0d0;
+  border-radius: 10px;
+  position: relative;
+  transition: background-color 0.2s;
+}
+
+.chat-role-toggle.assistant-mode .role-switch {
+  background-color: var(--engineering-orange);
+}
+
+.role-switch-slider {
+  width: 16px;
+  height: 16px;
+  background-color: white;
+  border-radius: 50%;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.chat-role-toggle.assistant-mode .role-switch-slider {
+  transform: translateX(16px);
+}
+
 .chat-input {
   flex: 1;
   border: 1px solid var(--border-secondary);
