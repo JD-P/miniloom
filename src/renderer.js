@@ -74,7 +74,6 @@ const DOM = {
   chatMessages: document.getElementById("chat-messages"),
   chatInput: document.getElementById("chat-input"),
   chatSendButton: document.getElementById("chat-send-button"),
-  chatRoleToggle: document.getElementById("chat-role-toggle"),
 };
 
 /*
@@ -105,7 +104,7 @@ function updateFocus(nodeId, reason = "unknown") {
 
 // Chat view state
 let chatViewMode = "text"; // "text" or "chat"
-let chatInputRole = "user"; // "user" or "assistant"
+let editingMessageIndex = null; // Index of message being edited, or null
 
 function isChatCompletionMethod() {
   if (!llmService) return false;
@@ -129,10 +128,8 @@ function updateChatToggleVisibility() {
 }
 
 function updateViewMode() {
-  // Save any pending chat edits before switching
-  if (chatViewMode === "chat") {
-    updateChatMLFromUI();
-  }
+  // Cancel any ongoing editing when switching modes
+  editingMessageIndex = null;
   
   if (chatViewMode === "chat") {
     DOM.editor.style.display = "none";
@@ -178,6 +175,175 @@ function parseChatML(text) {
   }
 }
 
+// Extract content from message, handling reasoning/answer fields
+function getMessageContent(msg) {
+  if (msg.content) {
+    return msg.content;
+  }
+  // Handle reasoning/answer structure (OpenRouter format)
+  if (msg.reasoning && msg.answer) {
+    return `**Reasoning:**\n${msg.reasoning}\n\n**Answer:**\n${msg.answer}`;
+  }
+  if (msg.answer) {
+    return msg.answer;
+  }
+  if (msg.reasoning) {
+    return msg.reasoning;
+  }
+  return "";
+}
+
+// Safe markdown renderer with whitelist
+function renderMarkdown(text) {
+  if (!window.marked) {
+    // Fallback if marked isn't loaded
+    return escapeHtml(text).replace(/\n/g, "<br>");
+  }
+  
+  // Configure marked with safe options
+  const renderer = new marked.Renderer();
+  
+  // Whitelist of allowed HTML tags
+  const allowedTags = [
+    'p', 'br', 'strong', 'em', 'u', 's', 'code', 'pre',
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    'ul', 'ol', 'li', 'blockquote',
+    'table', 'thead', 'tbody', 'tr', 'th', 'td',
+    'a'
+  ];
+  
+  // Escape HTML except for whitelisted tags
+  function sanitizeHtml(html) {
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    
+    // Remove all non-whitelisted tags but keep their text content
+    const walker = document.createTreeWalker(
+      div,
+      NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT,
+      null
+    );
+    
+    const nodesToRemove = [];
+    let node;
+    
+    while (node = walker.nextNode()) {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        if (!allowedTags.includes(node.tagName.toLowerCase())) {
+          nodesToRemove.push(node);
+        } else {
+          // Sanitize attributes - only allow href on <a> tags
+          if (node.tagName.toLowerCase() === 'a') {
+            const href = node.getAttribute('href');
+            if (href && (href.startsWith('http://') || href.startsWith('https://'))) {
+              node.setAttribute('target', '_blank');
+              node.setAttribute('rel', 'noopener noreferrer');
+            } else {
+              node.removeAttribute('href');
+            }
+          }
+          // Remove all other attributes
+          Array.from(node.attributes).forEach(attr => {
+            if (attr.name !== 'href' && attr.name !== 'target' && attr.name !== 'rel') {
+              node.removeAttribute(attr.name);
+            }
+          });
+        }
+      }
+    }
+    
+    nodesToRemove.forEach(n => {
+      const parent = n.parentNode;
+      while (n.firstChild) {
+        parent.insertBefore(n.firstChild, n);
+      }
+      parent.removeChild(n);
+    });
+    
+    return div.innerHTML;
+  }
+  
+  // Custom code block renderer (Discord-style)
+  renderer.code = function(code, language) {
+    const escaped = escapeHtml(code);
+    const lang = language || '';
+    return `<div class="code-block"><pre><code class="language-${lang}">${escaped}</code></pre></div>`;
+  };
+  
+  marked.setOptions({
+    breaks: true,
+    gfm: true,
+    renderer: renderer
+  });
+  
+  // Render markdown
+  let html = marked.parse(text);
+  
+  // Sanitize the HTML
+  html = sanitizeHtml(html);
+  
+  // Process LaTeX math expressions
+  // First handle display math: $$...$$
+  html = html.replace(/\$\$([^$]+?)\$\$/g, (match, formula) => {
+    return `<div class="math-display">\\[${escapeHtml(formula)}\\]</div>`;
+  });
+  
+  // Then handle inline math: $...$ (but not $$ which we already processed)
+  html = html.replace(/\$([^$\n]+?)\$/g, (match, formula) => {
+    return `<span class="math-inline">\\(${escapeHtml(formula)}\\)</span>`;
+  });
+  
+  // Also handle \(...\) and \[...\] if not already processed
+  html = html.replace(/\\\(([^)]+?)\\\)/g, (match, formula) => {
+    return `<span class="math-inline">\\(${escapeHtml(formula)}\\)</span>`;
+  });
+  html = html.replace(/\\\[([^\]]+?)\\\]/g, (match, formula) => {
+    return `<div class="math-display">\\[${escapeHtml(formula)}\\]</div>`;
+  });
+  
+  // Render MathJax after a short delay
+  setTimeout(() => {
+    if (window.MathJax && window.MathJax.typesetPromise) {
+      const mathElements = document.querySelectorAll('.math-inline, .math-display');
+      if (mathElements.length > 0) {
+        window.MathJax.typesetPromise(mathElements).catch((err) => {
+          console.warn('MathJax rendering error:', err);
+        });
+      }
+    }
+  }, 100);
+  
+  return html;
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function copyToClipboard(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).catch(err => {
+      console.error('Failed to copy:', err);
+    });
+  } else {
+    // Fallback for older browsers
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+      document.execCommand('copy');
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+    document.body.removeChild(textarea);
+  }
+}
+
 function renderChatView() {
   if (!appState.focusedNode) return;
   
@@ -195,70 +361,180 @@ function renderChatView() {
     header.className = "chat-message-header";
     header.textContent = msg.role === "user" ? "User" : msg.role === "assistant" ? "AI Assistant" : "System";
     
+    // Message actions (copy/edit buttons)
+    const actions = document.createElement("div");
+    actions.className = "chat-message-actions";
+    
+    const messageContent = getMessageContent(msg);
+    
+    const copyBtn = document.createElement("button");
+    copyBtn.className = "chat-action-btn copy-btn";
+    copyBtn.title = "Copy message";
+    copyBtn.innerHTML = "📋";
+    copyBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      copyToClipboard(messageContent);
+    });
+    
+    const editBtn = document.createElement("button");
+    editBtn.className = "chat-action-btn edit-btn";
+    editBtn.title = "Edit message";
+    editBtn.innerHTML = "✏️";
+    editBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      startEditingMessage(index, msg);
+    });
+    
+    actions.appendChild(copyBtn);
+    actions.appendChild(editBtn);
+    
     const content = document.createElement("div");
     content.className = "chat-message-content";
-    content.textContent = msg.content || "";
-    content.contentEditable = "true";
+    
+    if (editingMessageIndex === index) {
+      // Show edit mode
+      const editTextarea = document.createElement("textarea");
+      editTextarea.className = "chat-message-edit-input";
+      editTextarea.value = messageContent;
+      editTextarea.rows = Math.min(editTextarea.value.split('\n').length, 10);
+      
+      const editActions = document.createElement("div");
+      editActions.className = "chat-edit-actions";
+      
+      const saveBtn = document.createElement("button");
+      saveBtn.className = "chat-edit-btn save-btn";
+      saveBtn.textContent = "Save";
+      saveBtn.addEventListener("click", () => {
+        saveEditedMessage(index, editTextarea.value);
+      });
+      
+      const isLastAssistant = msg.role === "assistant" && index === messages.length - 1;
+      if (isLastAssistant) {
+        const saveResubmitBtn = document.createElement("button");
+        saveResubmitBtn.className = "chat-edit-btn save-resubmit-btn";
+        saveResubmitBtn.textContent = "Save and Resubmit";
+        saveResubmitBtn.addEventListener("click", () => {
+          saveAndResubmitMessage(index, editTextarea.value);
+        });
+        editActions.appendChild(saveResubmitBtn);
+      }
+      
+      const cancelBtn = document.createElement("button");
+      cancelBtn.className = "chat-edit-btn cancel-btn";
+      cancelBtn.textContent = "Cancel";
+      cancelBtn.addEventListener("click", () => {
+        cancelEditing();
+      });
+      
+      editActions.appendChild(saveBtn);
+      editActions.appendChild(cancelBtn);
+      
+      content.appendChild(editTextarea);
+      content.appendChild(editActions);
+    } else {
+      // Show rendered markdown
+      content.innerHTML = renderMarkdown(messageContent);
+    }
+    
     content.dataset.messageIndex = index;
     content.dataset.messageRole = msg.role;
     
-    // Handle content editing
-    content.addEventListener("blur", () => {
-      updateChatMLFromUI();
-    });
-    
-    content.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        content.blur();
-      }
-    });
-    
     messageDiv.appendChild(header);
+    messageDiv.appendChild(actions);
     messageDiv.appendChild(content);
     DOM.chatMessages.appendChild(messageDiv);
   });
   
   // Scroll to bottom
   DOM.chatMessages.scrollTop = DOM.chatMessages.scrollHeight;
+  
+  // Highlight code blocks
+  if (window.hljs) {
+    DOM.chatMessages.querySelectorAll('pre code').forEach((block) => {
+      hljs.highlightElement(block);
+    });
+  }
 }
 
-function updateChatMLFromUI() {
+function startEditingMessage(index, msg) {
+  editingMessageIndex = index;
+  renderChatView();
+}
+
+function cancelEditing() {
+  editingMessageIndex = null;
+  renderChatView();
+}
+
+function saveEditedMessage(index, newContent) {
   if (!appState.focusedNode) return;
   
-  const messages = [];
-  const messageElements = DOM.chatMessages.querySelectorAll(".chat-message");
+  const text = appState.focusedNode.cachedRenderText;
+  const messages = parseChatML(text);
   
-  messageElements.forEach((msgEl) => {
-    const contentEl = msgEl.querySelector(".chat-message-content");
-    const role = contentEl.dataset.messageRole;
-    const content = contentEl.textContent.trim();
-    
-    if (content) {
-      messages.push({ role, content });
-    }
-  });
+  if (messages[index]) {
+    messages[index].content = newContent.trim();
+  }
   
   const chatML = JSON.stringify({ messages }, null, 2);
   
-  // Update the node
   appState.loomTree.updateNode(
     appState.focusedNode,
     chatML,
     appState.focusedNode.summary
   );
   
-  // Update editor value to keep in sync
   DOM.editor.value = chatML;
   
-  // Update search index
   if (searchManager) {
     searchManager.updateNode(appState.focusedNode, appState.loomTree.renderNode(appState.focusedNode));
   }
   
-  // Update stats
+  editingMessageIndex = null;
+  renderChatView();
   updateTreeStatsDisplay();
 }
+
+function saveAndResubmitMessage(index, newContent) {
+  if (!appState.focusedNode) return;
+  
+  const text = appState.focusedNode.cachedRenderText;
+  const messages = parseChatML(text);
+  
+  if (messages[index]) {
+    messages[index].content = newContent.trim();
+  }
+  
+  const chatML = JSON.stringify({ messages }, null, 2);
+  
+  appState.loomTree.updateNode(
+    appState.focusedNode,
+    chatML,
+    appState.focusedNode.summary
+  );
+  
+  DOM.editor.value = chatML;
+  
+  if (searchManager) {
+    searchManager.updateNode(appState.focusedNode, appState.loomTree.renderNode(appState.focusedNode));
+  }
+  
+  editingMessageIndex = null;
+  renderChatView();
+  updateTreeStatsDisplay();
+  
+  // Generate new response (this will complete the assistant message)
+  if (llmService && appState.focusedNode) {
+    const validation = validateChatML(DOM.editor.value);
+    if (!validation.valid) {
+      alert(`Invalid ChatML: ${validation.error}`);
+      return;
+    }
+    llmService.generateNewResponses(appState.focusedNode.id);
+  }
+}
+
+// Removed updateChatMLFromUI - now using explicit save functions
 
 function sendChatMessage() {
   const inputText = DOM.chatInput.value.trim();
@@ -269,8 +545,8 @@ function sendChatMessage() {
   const currentText = appState.focusedNode.cachedRenderText;
   const messages = parseChatML(currentText);
   
-  // Add new message with the selected role
-  messages.push({ role: chatInputRole, content: inputText });
+  // Add new user message
+  messages.push({ role: "user", content: inputText });
   
   const chatML = JSON.stringify({ messages }, null, 2);
   
@@ -298,16 +574,6 @@ function sendChatMessage() {
   
   // Update stats
   updateTreeStatsDisplay();
-}
-
-function updateChatRoleToggle() {
-  if (!DOM.chatRoleToggle) return;
-  
-  if (chatInputRole === "assistant") {
-    DOM.chatRoleToggle.classList.add("assistant-mode");
-  } else {
-    DOM.chatRoleToggle.classList.remove("assistant-mode");
-  }
 }
 
 function updateUI() {
@@ -959,15 +1225,6 @@ async function init() {
     // Chat send button handler
     if (DOM.chatSendButton) {
       DOM.chatSendButton.addEventListener("click", sendChatMessage);
-    }
-
-    // Chat role toggle handler
-    if (DOM.chatRoleToggle) {
-      DOM.chatRoleToggle.addEventListener("click", () => {
-        chatInputRole = chatInputRole === "user" ? "assistant" : "user";
-        updateChatRoleToggle();
-      });
-      updateChatRoleToggle();
     }
 
     // Chat input handlers

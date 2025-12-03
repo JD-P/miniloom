@@ -816,16 +816,39 @@ class LLMService {
     for (const choice of responseData.choices) {
       const assistantMessage = choice.message;
       const newChatData = JSON.parse(JSON.stringify(chatData));
-      newChatData.messages.push({
-        role: assistantMessage.role,
-        content: assistantMessage.content,
-      });
+      
+      // Handle reasoning/answer structure (OpenRouter format)
+      let messageContent = assistantMessage.content || "";
+      const messageObj = {
+        role: assistantMessage.role || "assistant",
+      };
+      
+      // Check if response has reasoning/answer fields
+      if (assistantMessage.reasoning !== undefined || assistantMessage.answer !== undefined) {
+        // Use reasoning/answer structure
+        if (assistantMessage.reasoning) {
+          messageObj.reasoning = assistantMessage.reasoning;
+        }
+        if (assistantMessage.answer) {
+          messageObj.answer = assistantMessage.answer;
+        }
+        // Also include content if present for compatibility
+        if (assistantMessage.content) {
+          messageObj.content = assistantMessage.content;
+        }
+      } else {
+        // Standard content field
+        messageObj.content = messageContent;
+      }
+      
+      newChatData.messages.push(messageObj);
 
       const newChatText = JSON.stringify(newChatData, null, 2);
 
       // Check if no tokens were generated and model finished
       const hasNoContent =
-        !assistantMessage.content || assistantMessage.content.trim() === "";
+        (!messageContent || messageContent.trim() === "") &&
+        (!assistantMessage.reasoning && !assistantMessage.answer);
       const isFinished =
         choice.finish_reason === "stop" ||
         choice.finish_reason === "end_turn" ||
@@ -835,10 +858,9 @@ class LLMService {
       if (hasNoContent && isFinished) {
         summary = "Branch Complete";
       } else {
-        summary = await this.generateSummary(
-          assistantMessage.content || "Assistant response",
-          capturedSettings
-        );
+        const summaryText = messageContent || 
+          (assistantMessage.answer || assistantMessage.reasoning || "Assistant response");
+        summary = await this.generateSummary(summaryText, capturedSettings);
       }
 
       const responseNode = loomTree.createNode(

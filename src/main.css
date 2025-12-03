@@ -464,6 +464,10 @@ select {
   position: relative;
 }
 
+.chat-message:hover .chat-message-actions {
+  opacity: 1;
+}
+
 .chat-message.user {
   background-color: rgba(213, 4, 2, 0.1);
   border-left: 3px solid var(--engineering-orange);
@@ -481,24 +485,205 @@ select {
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .chat-message.user .chat-message-header {
   color: var(--engineering-orange);
 }
 
+.chat-message-actions {
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.chat-action-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  font-size: 14px;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+  border-radius: 4px;
+}
+
+.chat-action-btn:hover {
+  opacity: 1;
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
 .chat-message-content {
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.6;
   color: var(--text-primary);
-  white-space: pre-wrap;
   word-wrap: break-word;
 }
 
-.chat-message.editing .chat-message-content {
-  outline: 2px solid var(--engineering-orange);
-  outline-offset: -2px;
+.chat-message-content p {
+  margin: 0 0 8px 0;
+}
+
+.chat-message-content p:last-child {
+  margin-bottom: 0;
+}
+
+.chat-message-content h1,
+.chat-message-content h2,
+.chat-message-content h3,
+.chat-message-content h4,
+.chat-message-content h5,
+.chat-message-content h6 {
+  margin: 12px 0 8px 0;
+  font-weight: 600;
+}
+
+.chat-message-content h1 { font-size: 1.5em; }
+.chat-message-content h2 { font-size: 1.3em; }
+.chat-message-content h3 { font-size: 1.1em; }
+
+.chat-message-content ul,
+.chat-message-content ol {
+  margin: 8px 0;
+  padding-left: 24px;
+}
+
+.chat-message-content li {
+  margin: 4px 0;
+}
+
+.chat-message-content blockquote {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--border-secondary);
+  background-color: var(--bg-secondary);
   border-radius: 4px;
+}
+
+.chat-message-content table {
+  border-collapse: collapse;
+  margin: 8px 0;
+  width: 100%;
+}
+
+.chat-message-content table th,
+.chat-message-content table td {
+  border: 1px solid var(--border-secondary);
+  padding: 6px 12px;
+  text-align: left;
+}
+
+.chat-message-content table th {
+  background-color: var(--bg-secondary);
+  font-weight: 600;
+}
+
+.chat-message-content a {
+  color: var(--engineering-orange);
+  text-decoration: none;
+}
+
+.chat-message-content a:hover {
+  text-decoration: underline;
+}
+
+.chat-message-content code {
+  background-color: rgba(0, 0, 0, 0.05);
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-family: var(--font-family-mono);
+  font-size: 0.9em;
+}
+
+.chat-message-content .code-block {
+  margin: 12px 0;
+  background-color: #1e1e1e;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #333;
+}
+
+.chat-message-content .code-block pre {
+  margin: 0;
+  padding: 12px;
+  overflow-x: auto;
+  background-color: #1e1e1e;
+}
+
+.chat-message-content .code-block code {
+  background: none;
+  padding: 0;
+  color: #d4d4d4;
+  font-family: var(--font-family-mono);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.chat-message-content .math-inline,
+.chat-message-content .math-display {
+  margin: 8px 0;
+}
+
+.chat-message-edit-input {
+  width: 100%;
+  min-height: 100px;
+  padding: 8px;
+  border: 1px solid var(--border-secondary);
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  resize: vertical;
+  margin-bottom: 8px;
+}
+
+.chat-edit-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.chat-edit-btn {
+  padding: 6px 16px;
+  border: 1px solid var(--border-secondary);
+  border-radius: 4px;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.chat-edit-btn:hover {
+  background-color: var(--bg-secondary);
+  border-color: var(--border-hover);
+}
+
+.chat-edit-btn.save-btn {
+  background-color: var(--button-secondary);
+  color: white;
+  border-color: var(--button-secondary);
+}
+
+.chat-edit-btn.save-btn:hover {
+  background-color: var(--button-secondary-hover);
+  border-color: var(--button-secondary-hover);
+}
+
+.chat-edit-btn.save-resubmit-btn {
+  background-color: var(--engineering-orange);
+  color: white;
+  border-color: var(--engineering-orange);
+}
+
+.chat-edit-btn.save-resubmit-btn:hover {
+  background-color: var(--barn-red);
+  border-color: var(--barn-red);
 }
 
 .chat-input-container {
@@ -508,77 +693,6 @@ select {
   border-top: 1px solid #e0e0e0;
   background-color: var(--bg-secondary);
   align-items: flex-end;
-}
-
-.chat-role-toggle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  background-color: var(--bg-primary);
-  border: 1px solid var(--border-secondary);
-  border-radius: 6px;
-  cursor: pointer;
-  user-select: none;
-  transition: all 0.2s;
-  flex-shrink: 0;
-}
-
-.chat-role-toggle:hover {
-  border-color: var(--border-hover);
-  background-color: var(--bg-hover);
-}
-
-.chat-role-toggle.assistant-mode {
-  background-color: rgba(213, 4, 2, 0.1);
-  border-color: var(--engineering-orange);
-}
-
-.role-label {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  min-width: 45px;
-  text-align: center;
-}
-
-.chat-role-toggle.assistant-mode .role-label:last-child {
-  color: var(--engineering-orange);
-  font-weight: 600;
-}
-
-.chat-role-toggle:not(.assistant-mode) .role-label:first-child {
-  color: var(--engineering-orange);
-  font-weight: 600;
-}
-
-.role-switch {
-  width: 36px;
-  height: 20px;
-  background-color: #d0d0d0;
-  border-radius: 10px;
-  position: relative;
-  transition: background-color 0.2s;
-}
-
-.chat-role-toggle.assistant-mode .role-switch {
-  background-color: var(--engineering-orange);
-}
-
-.role-switch-slider {
-  width: 16px;
-  height: 16px;
-  background-color: white;
-  border-radius: 50%;
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  transition: transform 0.2s;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-}
-
-.chat-role-toggle.assistant-mode .role-switch-slider {
-  transform: translateX(16px);
 }
 
 .chat-input {

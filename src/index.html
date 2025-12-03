@@ -9,6 +9,23 @@
       content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src *;"
     />
     <link rel="stylesheet" href="main.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/default.min.css" />
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script>
+      window.MathJax = {
+        tex: {
+          inlineMath: [['\\(', '\\)']],
+          displayMath: [['\\[', '\\]']],
+          processEscapes: true,
+          processEnvironments: true
+        },
+        options: {
+          skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre'],
+          ignoreHtmlClass: 'no-math'
+        }
+      };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
   </head>
   <body>
     <div id="tree-stats-tooltip" class="tooltip" style="display: none"></div>
@@ -51,13 +68,6 @@
           <div id="chat-view" class="chat-view" style="display: none;">
             <div id="chat-messages" class="chat-messages"></div>
             <div id="chat-input-container" class="chat-input-container">
-              <div id="chat-role-toggle" class="chat-role-toggle" title="Toggle between User and Assistant">
-                <span class="role-label">User</span>
-                <div class="role-switch">
-                  <div class="role-switch-slider"></div>
-                </div>
-                <span class="role-label">Assistant</span>
-              </div>
               <textarea
                 id="chat-input"
                 class="chat-input"
@@ -212,6 +222,8 @@
         style="display: none"
       ></div>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script src="utils.js"></script>
     <script src="model.js"></script>
     <script src="llm-service.js"></script>
