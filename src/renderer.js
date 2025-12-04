@@ -218,22 +218,32 @@ function validateChatML(text) {
 
 function parseChatML(text) {
   // Handle null, undefined, or non-string values
-  if (text == null) {
+  if (text == null || text === undefined) {
     return [{ role: "user", content: "" }];
   }
   
   if (typeof text !== "string") {
-    text = String(text);
+    try {
+      text = String(text);
+    } catch (e) {
+      return [{ role: "user", content: "" }];
+    }
   }
   
-  const trimmedText = text.trim();
+  let trimmedText;
+  try {
+    trimmedText = text.trim();
+  } catch (e) {
+    trimmedText = "";
+  }
+  
   if (!trimmedText) {
     return [{ role: "user", content: "" }];
   }
   
   try {
     const data = JSON.parse(trimmedText);
-    if (data && data.messages && Array.isArray(data.messages)) {
+    if (data && data.messages && Array.isArray(data.messages) && data.messages.length > 0) {
       return data.messages;
     }
     // Fallback: treat as single user message
@@ -418,15 +428,31 @@ function copyToClipboard(text) {
 }
 
 function renderChatView() {
-  if (!appState || !appState.focusedNode) return;
-  if (!DOM.chatMessages) return;
+  if (!appState || !appState.focusedNode) {
+    console.warn("Cannot render chat view: appState or focusedNode is null");
+    return;
+  }
+  if (!DOM.chatMessages) {
+    console.warn("Cannot render chat view: chatMessages element not found");
+    return;
+  }
   
   const text = appState.focusedNode.cachedRenderText || "";
   const messages = parseChatML(text);
   
+  if (!Array.isArray(messages) || messages.length === 0) {
+    // Show empty state
+    DOM.chatMessages.innerHTML = '<div class="chat-empty-state">No messages yet. Start a conversation!</div>';
+    return;
+  }
+  
   DOM.chatMessages.innerHTML = "";
   
   messages.forEach((msg, index) => {
+    if (!msg || typeof msg !== "object") {
+      console.warn("Invalid message at index", index, msg);
+      return;
+    }
     const messageDiv = document.createElement("div");
     messageDiv.className = `chat-message ${msg.role}`;
     messageDiv.dataset.messageIndex = index;
@@ -611,14 +637,28 @@ function saveAndResubmitMessage(index, newContent) {
 // Removed updateChatMLFromUI - now using explicit save functions
 
 function sendChatMessage() {
-  const inputText = DOM.chatInput?.value?.trim();
+  if (!DOM.chatInput) {
+    console.error("Chat input element not found");
+    return;
+  }
+  
+  const inputText = DOM.chatInput.value ? DOM.chatInput.value.trim() : "";
   if (!inputText) return;
   
-  if (!appState.focusedNode) return;
+  if (!appState || !appState.focusedNode) {
+    console.error("Cannot send message: appState or focusedNode is null");
+    return;
+  }
   
   try {
     const currentText = appState.focusedNode.cachedRenderText || "";
     const messages = parseChatML(currentText);
+    
+    // Ensure messages is an array
+    if (!Array.isArray(messages)) {
+      console.warn("parseChatML returned non-array, creating new array");
+      messages = [];
+    }
     
     // Add new user message
     messages.push({ role: "user", content: inputText });
@@ -638,13 +678,13 @@ function sendChatMessage() {
     }
     
     // Clear input
-    if (DOM.chatInput) {
-      DOM.chatInput.value = "";
-      DOM.chatInput.style.height = "auto";
-    }
+    DOM.chatInput.value = "";
+    DOM.chatInput.style.height = "auto";
     
-    // Re-render chat view
-    renderChatView();
+    // Re-render chat view after a short delay to ensure DOM is updated
+    setTimeout(() => {
+      renderChatView();
+    }, 10);
     
     // Update search index
     if (searchManager) {

@@ -457,6 +457,16 @@ select {
   min-height: 0;
 }
 
+.chat-empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 40px;
+}
+
 .chat-message {
   padding: 12px 16px;
   border-radius: 8px;
