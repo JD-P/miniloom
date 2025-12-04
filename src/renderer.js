@@ -166,10 +166,16 @@ function updateChatToggleVisibility() {
           chatViewMode = "chat";
         }
       }
-      // Force render when toggle first appears - use setTimeout to ensure DOM is ready
-      setTimeout(() => {
+      // Force render when toggle first appears - use requestAnimationFrame to ensure DOM is ready
+      requestAnimationFrame(() => {
         updateViewMode();
-      }, 0);
+        // Also ensure it renders after a short delay to catch any async updates
+        setTimeout(() => {
+          if (chatViewMode === "chat" && DOM.chatView) {
+            renderChatView();
+          }
+        }, 50);
+      });
     }
   }
   
@@ -205,12 +211,12 @@ function updateViewMode() {
     DOM.editor.style.display = "none";
     DOM.chatView.style.display = "flex";
     // Always render chat view when switching to chat mode
-    // Use setTimeout to ensure DOM is ready after display change
-    setTimeout(() => {
+    // Use requestAnimationFrame to ensure DOM is ready after display change
+    requestAnimationFrame(() => {
       if (DOM.chatView && DOM.chatView.style.display !== "none") {
         renderChatView();
       }
-    }, 10);
+    });
   } else {
     DOM.editor.style.display = "block";
     DOM.chatView.style.display = "none";
@@ -243,7 +249,7 @@ function validateChatML(text) {
 function parseChatML(text) {
   // Handle null, undefined, or non-string values
   if (text == null || text === undefined) {
-    return [{ role: "user", content: "" }];
+    return [];
   }
   
   // Convert to string safely
@@ -254,15 +260,15 @@ function parseChatML(text) {
     } else if (text != null && text !== undefined) {
       textStr = String(text);
     } else {
-      return [{ role: "user", content: "" }];
+      return [];
     }
   } catch (e) {
-    return [{ role: "user", content: "" }];
+    return [];
   }
   
   // Ensure textStr is not null after conversion
   if (textStr == null || textStr === undefined || textStr === "null" || textStr === "undefined") {
-    return [{ role: "user", content: "" }];
+    return [];
   }
   
   // Safely trim the string - check if textStr is truthy and has trim method
@@ -283,20 +289,20 @@ function parseChatML(text) {
     trimmedText = "";
   }
   
-  // Final safety check
+  // If empty after trimming, return empty array
   if (!trimmedText || trimmedText === "null" || trimmedText === "undefined" || typeof trimmedText !== "string") {
-    return [{ role: "user", content: "" }];
+    return [];
   }
   
   try {
     const data = JSON.parse(trimmedText);
-    if (data && data.messages && Array.isArray(data.messages) && data.messages.length > 0) {
+    if (data && data.messages && Array.isArray(data.messages)) {
       return data.messages;
     }
-    // Fallback: treat as single user message
+    // Fallback: treat as single user message if it's not valid JSON
     return [{ role: "user", content: trimmedText }];
   } catch (error) {
-    // Fallback: treat as single user message
+    // If not valid JSON, treat as single user message
     return [{ role: "user", content: trimmedText }];
   }
 }
@@ -530,9 +536,11 @@ function renderChatView() {
     messages = [];
   }
   
+  // Show empty state if no messages
   if (!Array.isArray(messages) || messages.length === 0) {
-    // Show empty state
-    DOM.chatMessages.innerHTML = '<div class="chat-empty-state">No messages yet. Start a conversation!</div>';
+    if (DOM.chatMessages) {
+      DOM.chatMessages.innerHTML = '<div class="chat-empty-state">No messages yet. Start a conversation!</div>';
+    }
     return;
   }
   
