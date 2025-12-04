@@ -237,7 +237,7 @@ function parseChatML(text) {
   }
   
   // Ensure textStr is not null after conversion
-  if (textStr == null || textStr === undefined) {
+  if (textStr == null || textStr === undefined || textStr === "null" || textStr === "undefined") {
     return [{ role: "user", content: "" }];
   }
   
@@ -245,14 +245,16 @@ function parseChatML(text) {
   try {
     if (textStr && typeof textStr.trim === "function") {
       trimmedText = textStr.trim();
+    } else if (textStr) {
+      trimmedText = String(textStr).replace(/^\s+|\s+$/g, "");
     } else {
-      trimmedText = String(textStr || "");
+      trimmedText = "";
     }
   } catch (e) {
     trimmedText = "";
   }
   
-  if (!trimmedText) {
+  if (!trimmedText || trimmedText === "null" || trimmedText === "undefined") {
     return [{ role: "user", content: "" }];
   }
   
@@ -461,8 +463,15 @@ function renderChatView() {
   let text = "";
   try {
     const node = appState.focusedNode;
-    if (node && node.cachedRenderText != null) {
-      text = String(node.cachedRenderText);
+    if (node && node.cachedRenderText != null && node.cachedRenderText !== undefined) {
+      const renderText = node.cachedRenderText;
+      if (typeof renderText === "string") {
+        text = renderText;
+      } else if (renderText != null) {
+        text = String(renderText);
+      } else {
+        text = "";
+      }
     } else {
       text = "";
     }
@@ -474,6 +483,10 @@ function renderChatView() {
   let messages = [];
   try {
     messages = parseChatML(text);
+    if (!Array.isArray(messages)) {
+      console.warn("parseChatML returned non-array, using empty array");
+      messages = [];
+    }
   } catch (e) {
     console.error("Error parsing ChatML:", e);
     messages = [];
@@ -691,21 +704,25 @@ function sendChatMessage() {
   
   try {
     const node = appState.focusedNode;
-    const currentText = (node && node.cachedRenderText != null)
-      ? String(node.cachedRenderText)
-      : "";
+    let currentText = "";
+    if (node && node.cachedRenderText != null && node.cachedRenderText !== undefined) {
+      const renderText = node.cachedRenderText;
+      if (typeof renderText === "string") {
+        currentText = renderText;
+      } else if (renderText != null) {
+        currentText = String(renderText);
+      }
+    }
     
     let messages = [];
     try {
       messages = parseChatML(currentText);
+      if (!Array.isArray(messages)) {
+        console.warn("parseChatML returned non-array, creating new array");
+        messages = [];
+      }
     } catch (e) {
       console.warn("Error parsing current ChatML, starting fresh:", e);
-      messages = [];
-    }
-    
-    // Ensure messages is an array
-    if (!Array.isArray(messages)) {
-      console.warn("parseChatML returned non-array, creating new array");
       messages = [];
     }
     
@@ -732,10 +749,10 @@ function sendChatMessage() {
       DOM.chatInput.style.height = "auto";
     }
     
-    // Re-render chat view after a short delay to ensure DOM is updated
-    setTimeout(() => {
+    // Re-render chat view - use requestAnimationFrame for better timing
+    requestAnimationFrame(() => {
       renderChatView();
-    }, 10);
+    });
     
     // Update search index
     if (searchManager && node) {
