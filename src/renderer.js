@@ -166,16 +166,11 @@ function updateChatToggleVisibility() {
           chatViewMode = "chat";
         }
       }
-      // Force render when toggle first appears - use requestAnimationFrame to ensure DOM is ready
-      requestAnimationFrame(() => {
+      // Force render when toggle first appears
+      // Use setTimeout to ensure DOM is fully ready
+      setTimeout(() => {
         updateViewMode();
-        // Also ensure it renders after a short delay to catch any async updates
-        setTimeout(() => {
-          if (chatViewMode === "chat" && DOM.chatView) {
-            renderChatView();
-          }
-        }, 50);
-      });
+      }, 0);
     }
   }
   
@@ -189,7 +184,7 @@ function updateChatToggleVisibility() {
 }
 
 function updateGenerateButtonVisibility() {
-  if (DOM.generateButton && DOM.generateButtonContainer) {
+  if (DOM.generateButtonContainer) {
     if (chatViewMode === "chat") {
       DOM.generateButtonContainer.style.display = "none";
     } else {
@@ -211,12 +206,12 @@ function updateViewMode() {
     DOM.editor.style.display = "none";
     DOM.chatView.style.display = "flex";
     // Always render chat view when switching to chat mode
-    // Use requestAnimationFrame to ensure DOM is ready after display change
-    requestAnimationFrame(() => {
+    // Use setTimeout to ensure DOM is ready after display change
+    setTimeout(() => {
       if (DOM.chatView && DOM.chatView.style.display !== "none") {
         renderChatView();
       }
-    });
+    }, 0);
   } else {
     DOM.editor.style.display = "block";
     DOM.chatView.style.display = "none";
@@ -300,10 +295,16 @@ function parseChatML(text) {
       return data.messages;
     }
     // Fallback: treat as single user message if it's not valid JSON
-    return [{ role: "user", content: trimmedText }];
+    if (trimmedText) {
+      return [{ role: "user", content: trimmedText }];
+    }
+    return [];
   } catch (error) {
     // If not valid JSON, treat as single user message
-    return [{ role: "user", content: trimmedText }];
+    if (trimmedText) {
+      return [{ role: "user", content: trimmedText }];
+    }
+    return [];
   }
 }
 
@@ -544,6 +545,7 @@ function renderChatView() {
     return;
   }
   
+  // Clear any existing content
   DOM.chatMessages.innerHTML = "";
   
   messages.forEach((msg, index) => {
@@ -652,14 +654,24 @@ function renderChatView() {
   });
   
   // Scroll to bottom
-  DOM.chatMessages.scrollTop = DOM.chatMessages.scrollHeight;
+  setTimeout(() => {
+    if (DOM.chatMessages) {
+      DOM.chatMessages.scrollTop = DOM.chatMessages.scrollHeight;
+    }
+  }, 0);
   
   // Highlight code blocks
-  if (window.hljs) {
-    DOM.chatMessages.querySelectorAll('pre code').forEach((block) => {
-      hljs.highlightElement(block);
-    });
-  }
+  setTimeout(() => {
+    if (window.hljs && DOM.chatMessages) {
+      DOM.chatMessages.querySelectorAll('pre code').forEach((block) => {
+        try {
+          hljs.highlightElement(block);
+        } catch (e) {
+          console.warn("Error highlighting code block:", e);
+        }
+      });
+    }
+  }, 100);
 }
 
 function startEditingMessage(index, msg) {
