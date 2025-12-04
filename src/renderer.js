@@ -227,7 +227,7 @@ function parseChatML(text) {
   try {
     if (typeof text === "string") {
       textStr = text;
-    } else if (text != null) {
+    } else if (text != null && text !== undefined) {
       textStr = String(text);
     } else {
       return [{ role: "user", content: "" }];
@@ -241,24 +241,35 @@ function parseChatML(text) {
     return [{ role: "user", content: "" }];
   }
   
-  // Safely trim the string
+  // Safely trim the string - check if textStr is truthy and has trim method
   let trimmedText = "";
   try {
-    if (textStr && typeof textStr === "string") {
-      // Check if trim exists before calling
-      if (typeof textStr.trim === "function") {
-        trimmedText = textStr.trim();
-      } else {
-        trimmedText = textStr.replace(/^\s+|\s+$/g, "");
-      }
+    if (textStr && typeof textStr === "string" && textStr.trim) {
+      trimmedText = textStr.trim();
+    } else if (textStr && typeof textStr === "string") {
+      // Fallback if trim doesn't exist
+      trimmedText = textStr.replace(/^\s+|\s+$/g, "");
     } else if (textStr != null && textStr !== undefined) {
       const str = String(textStr);
-      trimmedText = str.replace(/^\s+|\s+$/g, "");
+      if (str && str.trim) {
+        trimmedText = str.trim();
+      } else {
+        trimmedText = str.replace(/^\s+|\s+$/g, "");
+      }
     } else {
       trimmedText = "";
     }
   } catch (e) {
-    trimmedText = "";
+    // If trim fails, try manual replacement
+    try {
+      if (textStr && typeof textStr === "string") {
+        trimmedText = textStr.replace(/^\s+|\s+$/g, "");
+      } else {
+        trimmedText = String(textStr || "").replace(/^\s+|\s+$/g, "");
+      }
+    } catch (e2) {
+      trimmedText = "";
+    }
   }
   
   // Final safety check
