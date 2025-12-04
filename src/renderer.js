@@ -147,30 +147,20 @@ function updateChatToggleVisibility() {
     // If toggle just became visible, ensure view mode matches and render
     if (isChatMethod && !wasVisible) {
       // Default to chat mode if toggle just appeared
-      if (!DOM.chatToggle || !DOM.chatToggle.querySelector(".toggle-option.active")) {
-        chatViewMode = "chat";
-        if (DOM.chatToggle) {
-          const toggleOptions = DOM.chatToggle.querySelectorAll(".toggle-option");
-          toggleOptions.forEach(option => {
-            option.classList.remove("active");
-            if (option.dataset.mode === "chat") {
-              option.classList.add("active");
-            }
-          });
-        }
-      } else {
-        // Sync with active toggle
-        const activeOption = DOM.chatToggle.querySelector(".toggle-option.active");
-        if (activeOption) {
-          chatViewMode = activeOption.dataset.mode || "chat";
-        } else {
-          chatViewMode = "chat";
-        }
+      chatViewMode = "chat";
+      if (DOM.chatToggle) {
+        const toggleOptions = DOM.chatToggle.querySelectorAll(".toggle-option");
+        toggleOptions.forEach(option => {
+          option.classList.remove("active");
+          if (option.dataset.mode === "chat") {
+            option.classList.add("active");
+          }
+        });
       }
-      // Force render when toggle first appears - ensure it happens after DOM update
-      setTimeout(() => {
+      // Force render when toggle first appears
+      requestAnimationFrame(() => {
         updateViewMode();
-      }, 0);
+      });
     }
   }
   
@@ -184,18 +174,20 @@ function updateChatToggleVisibility() {
 }
 
 function updateGenerateButtonVisibility() {
-  if (DOM.generateButtonContainer) {
-    if (chatViewMode === "chat") {
+  if (chatViewMode === "chat") {
+    // Hide generate button in chat mode
+    if (DOM.generateButtonContainer) {
       DOM.generateButtonContainer.style.display = "none";
-    } else {
+    }
+    if (DOM.generateButton) {
+      DOM.generateButton.style.display = "none";
+    }
+  } else {
+    // Show generate button in text mode
+    if (DOM.generateButtonContainer) {
       DOM.generateButtonContainer.style.display = "flex";
     }
-  }
-  // Also hide/show the generate button itself
-  if (DOM.generateButton) {
-    if (chatViewMode === "chat") {
-      DOM.generateButton.style.display = "none";
-    } else {
+    if (DOM.generateButton) {
       DOM.generateButton.style.display = "flex";
     }
   }
@@ -260,7 +252,7 @@ function parseChatML(text) {
   try {
     if (typeof text === "string") {
       textStr = text;
-    } else if (text != null && text !== undefined) {
+    } else if (text != null) {
       textStr = String(text);
     } else {
       return [];
@@ -269,39 +261,39 @@ function parseChatML(text) {
     return [];
   }
   
-  // Ensure textStr is not null after conversion
-  if (textStr == null || textStr === undefined || textStr === "null" || textStr === "undefined") {
+  // Ensure textStr is a valid string
+  if (!textStr || typeof textStr !== "string" || textStr === "null" || textStr === "undefined") {
     return [];
   }
   
-  // Safely trim the string - check if textStr is truthy and has trim method
+  // Safely trim the string
   let trimmedText = "";
   try {
-    if (!textStr || typeof textStr !== "string") {
-      trimmedText = "";
-    } else {
-      // Use replace as fallback if trim doesn't exist or fails
-      try {
-        trimmedText = textStr.trim();
-      } catch (trimError) {
-        trimmedText = textStr.replace(/^\s+|\s+$/g, "");
-      }
-    }
+    trimmedText = textStr.trim();
   } catch (e) {
-    // If everything fails, use empty string
-    trimmedText = "";
+    // Fallback: use replace if trim fails
+    try {
+      trimmedText = textStr.replace(/^\s+|\s+$/g, "");
+    } catch (e2) {
+      trimmedText = textStr;
+    }
   }
   
   // If empty after trimming, return empty array
-  if (!trimmedText || trimmedText === "null" || trimmedText === "undefined" || typeof trimmedText !== "string") {
+  if (!trimmedText || trimmedText.length === 0) {
     return [];
   }
   
   try {
     const data = JSON.parse(trimmedText);
     if (data && data.messages && Array.isArray(data.messages)) {
-      // Validate messages array
-      return data.messages.filter(msg => msg && typeof msg === "object" && msg.role && msg.content);
+      // Validate messages array - filter out invalid messages
+      return data.messages.filter(msg => {
+        return msg && 
+               typeof msg === "object" && 
+               msg.role && 
+               (msg.content !== undefined || msg.reasoning !== undefined || msg.answer !== undefined);
+      });
     }
     // Fallback: treat as single user message if it's not valid JSON
     if (trimmedText && trimmedText.length > 0) {
