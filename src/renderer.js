@@ -167,11 +167,8 @@ function updateChatToggleVisibility() {
           });
         }
       }
+      // updateViewMode() will call renderChatView() if in chat mode
       updateViewMode();
-      // Ensure chat view is rendered if we're in chat mode
-      if (chatViewMode === "chat") {
-        renderChatView();
-      }
     }
   }
   if (!isChatMethod && chatViewMode === "chat") {
@@ -189,6 +186,7 @@ function updateViewMode() {
   if (chatViewMode === "chat") {
     DOM.editor.style.display = "none";
     DOM.chatView.style.display = "flex";
+    renderChatView();
   } else {
     DOM.editor.style.display = "block";
     DOM.chatView.style.display = "none";
@@ -1275,10 +1273,6 @@ async function init() {
           toggleOptions.forEach(opt => opt.classList.remove("active"));
           option.classList.add("active");
           updateViewMode();
-          // Ensure chat view is rendered if switching to chat mode
-          if (mode === "chat") {
-            renderChatView();
-          }
         });
       });
     }
