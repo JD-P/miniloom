@@ -157,10 +157,10 @@ function updateChatToggleVisibility() {
           }
         });
       }
-      // Force render when toggle first appears
-      requestAnimationFrame(() => {
+      // Force render when toggle first appears - use setTimeout to ensure DOM is ready
+      setTimeout(() => {
         updateViewMode();
-      });
+      }, 50);
     }
   }
   
@@ -182,6 +182,9 @@ function updateGenerateButtonVisibility() {
     if (DOM.generateButton) {
       DOM.generateButton.style.display = "none";
     }
+    if (DOM.die) {
+      DOM.die.style.display = "none";
+    }
   } else {
     // Show generate button in text mode
     if (DOM.generateButtonContainer) {
@@ -189,6 +192,9 @@ function updateGenerateButtonVisibility() {
     }
     if (DOM.generateButton) {
       DOM.generateButton.style.display = "flex";
+    }
+    if (DOM.die) {
+      DOM.die.style.display = "flex";
     }
   }
 }
@@ -848,10 +854,10 @@ function sendChatMessage() {
       DOM.chatInput.style.height = "auto";
     }
     
-    // Re-render chat view - use requestAnimationFrame to ensure state is updated
-    requestAnimationFrame(() => {
+    // Re-render chat view - use setTimeout to ensure state is updated
+    setTimeout(() => {
       renderChatView();
-    });
+    }, 10);
     
     // Update search index
     if (searchManager && node) {
