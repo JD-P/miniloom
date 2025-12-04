@@ -416,7 +416,7 @@ function renderChatView() {
   if (!appState.focusedNode) return;
   if (!DOM.chatMessages) return;
   
-  const text = appState.focusedNode.cachedRenderText || "";
+  const text = (appState.focusedNode && appState.focusedNode.cachedRenderText) ? appState.focusedNode.cachedRenderText : "";
   const messages = parseChatML(text);
   
   DOM.chatMessages.innerHTML = "";
