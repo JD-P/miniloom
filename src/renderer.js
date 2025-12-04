@@ -119,7 +119,8 @@ function isChatCompletionMethod() {
 function updateChatToggleVisibility() {
   const isChatMethod = isChatCompletionMethod();
   if (DOM.chatToggleContainer) {
-    const wasVisible = DOM.chatToggleContainer.style.display !== "none";
+    const wasVisible = DOM.chatToggleContainer.style.display !== "none" && 
+                       DOM.chatToggleContainer.style.display !== "";
     DOM.chatToggleContainer.style.display = isChatMethod ? "flex" : "none";
     
     // Initialize toggle buttons if they exist
@@ -128,7 +129,7 @@ function updateChatToggleVisibility() {
       const activeOption = DOM.chatToggle.querySelector(".toggle-option.active");
       
       // If no active option, default to chat mode
-      if (!activeOption) {
+      if (!activeOption || toggleOptions.length === 0) {
         chatViewMode = "chat";
         toggleOptions.forEach(option => {
           option.classList.remove("active");
@@ -138,7 +139,7 @@ function updateChatToggleVisibility() {
         });
       } else {
         // Sync chatViewMode with active toggle option
-        chatViewMode = activeOption.dataset.mode;
+        chatViewMode = activeOption.dataset.mode || "chat";
       }
     }
     
@@ -159,10 +160,16 @@ function updateChatToggleVisibility() {
       } else {
         // Sync with active toggle
         const activeOption = DOM.chatToggle.querySelector(".toggle-option.active");
-        chatViewMode = activeOption.dataset.mode;
+        if (activeOption) {
+          chatViewMode = activeOption.dataset.mode || "chat";
+        } else {
+          chatViewMode = "chat";
+        }
       }
-      // Force render when toggle first appears
-      updateViewMode();
+      // Force render when toggle first appears - use setTimeout to ensure DOM is ready
+      setTimeout(() => {
+        updateViewMode();
+      }, 0);
     }
   }
   
@@ -189,18 +196,21 @@ function updateViewMode() {
   // Cancel any ongoing editing when switching modes
   editingMessageIndex = null;
   
-  if (!DOM.editor || !DOM.chatView) return;
+  if (!DOM.editor || !DOM.chatView) {
+    console.warn("Cannot update view mode: editor or chatView elements not found");
+    return;
+  }
   
   if (chatViewMode === "chat") {
     DOM.editor.style.display = "none";
     DOM.chatView.style.display = "flex";
     // Always render chat view when switching to chat mode
-    // Use requestAnimationFrame to ensure DOM is ready after display change
-    requestAnimationFrame(() => {
+    // Use setTimeout to ensure DOM is ready after display change
+    setTimeout(() => {
       if (DOM.chatView && DOM.chatView.style.display !== "none") {
         renderChatView();
       }
-    });
+    }, 10);
   } else {
     DOM.editor.style.display = "block";
     DOM.chatView.style.display = "none";
@@ -258,44 +268,23 @@ function parseChatML(text) {
   // Safely trim the string - check if textStr is truthy and has trim method
   let trimmedText = "";
   try {
-    if (textStr == null || textStr === undefined) {
+    if (!textStr || typeof textStr !== "string") {
       trimmedText = "";
-    } else if (typeof textStr === "string") {
-      if (textStr.trim && typeof textStr.trim === "function") {
-        trimmedText = textStr.trim();
-      } else {
-        // Fallback if trim doesn't exist
-        trimmedText = textStr.replace(/^\s+|\s+$/g, "");
-      }
     } else {
-      const str = String(textStr);
-      if (str && str.trim && typeof str.trim === "function") {
-        trimmedText = str.trim();
-      } else {
-        trimmedText = str.replace(/^\s+|\s+$/g, "");
+      // Use replace as fallback if trim doesn't exist or fails
+      try {
+        trimmedText = textStr.trim();
+      } catch (trimError) {
+        trimmedText = textStr.replace(/^\s+|\s+$/g, "");
       }
     }
   } catch (e) {
-    // If trim fails, try manual replacement
-    try {
-      if (textStr == null || textStr === undefined) {
-        trimmedText = "";
-      } else if (typeof textStr === "string") {
-        trimmedText = textStr.replace(/^\s+|\s+$/g, "");
-      } else {
-        trimmedText = String(textStr || "").replace(/^\s+|\s+$/g, "");
-      }
-    } catch (e2) {
-      trimmedText = "";
-    }
-  }
-  
-  // Final safety check
-  if (trimmedText == null || trimmedText === undefined || typeof trimmedText !== "string") {
+    // If everything fails, use empty string
     trimmedText = "";
   }
   
-  if (!trimmedText || trimmedText === "null" || trimmedText === "undefined") {
+  // Final safety check
+  if (!trimmedText || trimmedText === "null" || trimmedText === "undefined" || typeof trimmedText !== "string") {
     return [{ role: "user", content: "" }];
   }
   
@@ -519,6 +508,14 @@ function renderChatView() {
   } catch (e) {
     console.warn("Error getting cachedRenderText:", e);
     text = "";
+  }
+  
+  // Ensure text is a valid string before parsing
+  if (text == null || text === undefined) {
+    text = "";
+  }
+  if (typeof text !== "string") {
+    text = String(text || "");
   }
   
   let messages = [];
@@ -830,10 +827,10 @@ function sendChatMessage() {
       DOM.chatInput.style.height = "auto";
     }
     
-    // Re-render chat view - use requestAnimationFrame for better timing
-    requestAnimationFrame(() => {
+    // Re-render chat view - use setTimeout to ensure state is updated
+    setTimeout(() => {
       renderChatView();
-    });
+    }, 10);
     
     // Update search index
     if (searchManager && node) {
