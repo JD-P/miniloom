@@ -221,16 +221,21 @@ function parseChatML(text) {
     return [{ role: "user", content: "" }];
   }
   
+  const trimmedText = text.trim();
+  if (!trimmedText) {
+    return [{ role: "user", content: "" }];
+  }
+  
   try {
-    const data = JSON.parse(text);
+    const data = JSON.parse(trimmedText);
     if (data.messages && Array.isArray(data.messages)) {
       return data.messages;
     }
     // Fallback: treat as single user message
-    return [{ role: "user", content: text.trim() }];
+    return [{ role: "user", content: trimmedText }];
   } catch (error) {
     // Fallback: treat as single user message
-    return [{ role: "user", content: text.trim() }];
+    return [{ role: "user", content: trimmedText }];
   }
 }
 
@@ -256,9 +261,11 @@ function getMessageContent(msg) {
 
 // Safe markdown renderer with whitelist
 function renderMarkdown(text) {
+  if (!text) return "";
+  
   if (!window.marked) {
     // Fallback if marked isn't loaded
-    return escapeHtml(text).replace(/\n/g, "<br>");
+    return escapeHtml(String(text)).replace(/\n/g, "<br>");
   }
   
   // Configure marked with safe options
@@ -338,7 +345,7 @@ function renderMarkdown(text) {
   });
   
   // Render markdown
-  let html = marked.parse(text);
+  let html = marked.parse(String(text));
   
   // Sanitize the HTML
   html = sanitizeHtml(html);
@@ -604,42 +611,47 @@ function sendChatMessage() {
   
   if (!appState.focusedNode) return;
   
-  const currentText = appState.focusedNode.cachedRenderText || "";
-  const messages = parseChatML(currentText);
-  
-  // Add new user message
-  messages.push({ role: "user", content: inputText });
-  
-  const chatML = JSON.stringify({ messages }, null, 2);
-  
-  // Update the node
-  appState.loomTree.updateNode(
-    appState.focusedNode,
-    chatML,
-    appState.focusedNode.summary
-  );
-  
-  // Update editor value to keep in sync
-  if (DOM.editor) {
-    DOM.editor.value = chatML;
+  try {
+    const currentText = appState.focusedNode.cachedRenderText || "";
+    const messages = parseChatML(currentText);
+    
+    // Add new user message
+    messages.push({ role: "user", content: inputText });
+    
+    const chatML = JSON.stringify({ messages }, null, 2);
+    
+    // Update the node
+    appState.loomTree.updateNode(
+      appState.focusedNode,
+      chatML,
+      appState.focusedNode.summary
+    );
+    
+    // Update editor value to keep in sync
+    if (DOM.editor) {
+      DOM.editor.value = chatML;
+    }
+    
+    // Clear input
+    if (DOM.chatInput) {
+      DOM.chatInput.value = "";
+      DOM.chatInput.style.height = "auto";
+    }
+    
+    // Re-render chat view
+    renderChatView();
+    
+    // Update search index
+    if (searchManager) {
+      searchManager.updateNode(appState.focusedNode, appState.loomTree.renderNode(appState.focusedNode));
+    }
+    
+    // Update stats
+    updateTreeStatsDisplay();
+  } catch (error) {
+    console.error("Error sending chat message:", error);
+    alert("Error sending message: " + error.message);
   }
-  
-  // Clear input
-  if (DOM.chatInput) {
-    DOM.chatInput.value = "";
-    DOM.chatInput.style.height = "auto";
-  }
-  
-  // Re-render chat view
-  renderChatView();
-  
-  // Update search index
-  if (searchManager) {
-    searchManager.updateNode(appState.focusedNode, appState.loomTree.renderNode(appState.focusedNode));
-  }
-  
-  // Update stats
-  updateTreeStatsDisplay();
 }
 
 function updateUI() {
