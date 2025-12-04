@@ -217,8 +217,13 @@ function validateChatML(text) {
 }
 
 function parseChatML(text) {
-  if (!text || typeof text !== "string") {
+  // Handle null, undefined, or non-string values
+  if (text == null) {
     return [{ role: "user", content: "" }];
+  }
+  
+  if (typeof text !== "string") {
+    text = String(text);
   }
   
   const trimmedText = text.trim();
@@ -228,7 +233,7 @@ function parseChatML(text) {
   
   try {
     const data = JSON.parse(trimmedText);
-    if (data.messages && Array.isArray(data.messages)) {
+    if (data && data.messages && Array.isArray(data.messages)) {
       return data.messages;
     }
     // Fallback: treat as single user message
@@ -413,10 +418,10 @@ function copyToClipboard(text) {
 }
 
 function renderChatView() {
-  if (!appState.focusedNode) return;
+  if (!appState || !appState.focusedNode) return;
   if (!DOM.chatMessages) return;
   
-  const text = (appState.focusedNode && appState.focusedNode.cachedRenderText) ? appState.focusedNode.cachedRenderText : "";
+  const text = appState.focusedNode.cachedRenderText || "";
   const messages = parseChatML(text);
   
   DOM.chatMessages.innerHTML = "";
