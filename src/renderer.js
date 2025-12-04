@@ -122,21 +122,42 @@ function updateChatToggleVisibility() {
     const wasVisible = DOM.chatToggleContainer.style.display !== "none";
     DOM.chatToggleContainer.style.display = isChatMethod ? "flex" : "none";
     
-    // If toggle just became visible and we're in text mode, check if we should switch to chat
+    // Initialize toggle buttons if they exist
+    if (isChatMethod && DOM.chatToggle) {
+      const toggleOptions = DOM.chatToggle.querySelectorAll(".toggle-option");
+      toggleOptions.forEach(option => {
+        option.classList.remove("active");
+        if (option.dataset.mode === chatViewMode) {
+          option.classList.add("active");
+        }
+      });
+      
+      // If no active option, default to chat mode
+      const activeOption = DOM.chatToggle.querySelector(".toggle-option.active");
+      if (!activeOption) {
+        chatViewMode = "chat";
+        toggleOptions.forEach(option => {
+          option.classList.remove("active");
+          if (option.dataset.mode === "chat") {
+            option.classList.add("active");
+          }
+        });
+      }
+    }
+    
+    // If toggle just became visible, ensure view mode matches
     if (isChatMethod && !wasVisible) {
-      // Check which toggle option is active
       const activeOption = DOM.chatToggle?.querySelector(".toggle-option.active");
       if (activeOption) {
         const activeMode = activeOption.dataset.mode;
-        if (activeMode === "chat" && chatViewMode !== "chat") {
-          chatViewMode = "chat";
-          updateViewMode();
+        if (activeMode !== chatViewMode) {
+          chatViewMode = activeMode;
         }
       } else {
-        // If no active option, default to chat mode
+        // Default to chat mode if no active option
         chatViewMode = "chat";
-        updateViewMode();
       }
+      updateViewMode();
     }
   }
   if (!isChatMethod && chatViewMode === "chat") {
@@ -149,10 +170,12 @@ function updateViewMode() {
   // Cancel any ongoing editing when switching modes
   editingMessageIndex = null;
   
+  if (!DOM.editor || !DOM.chatView) return;
+  
   if (chatViewMode === "chat") {
     DOM.editor.style.display = "none";
     DOM.chatView.style.display = "flex";
-    renderChatView();
+    // Render chat view will be called separately to ensure it happens
   } else {
     DOM.editor.style.display = "block";
     DOM.chatView.style.display = "none";
@@ -610,19 +633,10 @@ function updateUI() {
   // Update chat toggle visibility and sync view mode
   updateChatToggleVisibility();
   
-  // Ensure view mode matches the active toggle state
-  if (DOM.chatToggleContainer && DOM.chatToggleContainer.style.display !== "none") {
-    const activeOption = DOM.chatToggle?.querySelector(".toggle-option.active");
-    if (activeOption) {
-      const activeMode = activeOption.dataset.mode;
-      if (activeMode !== chatViewMode) {
-        chatViewMode = activeMode;
-      }
-    }
+  // Render the appropriate view
+  if (chatViewMode === "chat") {
+    renderChatView();
   }
-  
-  // Update the view based on current mode
-  updateViewMode();
 
   if (treeNav) {
     treeNav.updateTreeView();
@@ -1248,6 +1262,10 @@ async function init() {
           toggleOptions.forEach(opt => opt.classList.remove("active"));
           option.classList.add("active");
           updateViewMode();
+          // Ensure chat view is rendered if switching to chat mode
+          if (mode === "chat") {
+            renderChatView();
+          }
         });
       });
     }
