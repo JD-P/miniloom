@@ -167,8 +167,12 @@ function updateChatToggleVisibility() {
           });
         }
       }
-      // updateViewMode() will call renderChatView() if in chat mode
+      // Force update the view mode immediately
       updateViewMode();
+      // Ensure chat view is rendered if in chat mode
+      if (chatViewMode === "chat" && DOM.chatView) {
+        renderChatView();
+      }
     }
   }
   if (!isChatMethod && chatViewMode === "chat") {
@@ -186,6 +190,7 @@ function updateViewMode() {
   if (chatViewMode === "chat") {
     DOM.editor.style.display = "none";
     DOM.chatView.style.display = "flex";
+    // Always render chat view when switching to chat mode
     renderChatView();
   } else {
     DOM.editor.style.display = "block";
@@ -642,11 +647,18 @@ function updateUI() {
   updateErrorDisplay();
   
   // Update chat toggle visibility and sync view mode
+  // This may change chatViewMode and call updateViewMode()
   updateChatToggleVisibility();
   
-  // Render the appropriate view
-  if (chatViewMode === "chat") {
-    renderChatView();
+  // Ensure view mode is correct (updateChatToggleVisibility may have changed it)
+  // But don't re-render if we're already in the correct mode and view is visible
+  if (chatViewMode === "chat" && DOM.chatView && DOM.chatView.style.display !== "none") {
+    // Only render if we haven't already rendered (avoid double rendering)
+    if (!DOM.chatMessages.querySelector(".chat-message")) {
+      renderChatView();
+    }
+  } else if (chatViewMode === "text" && DOM.editor && DOM.editor.style.display !== "block") {
+    updateViewMode();
   }
 
   if (treeNav) {
