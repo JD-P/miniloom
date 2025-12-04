@@ -168,9 +168,9 @@ function updateChatToggleVisibility() {
         }
       }
       // Force render when toggle first appears - ensure it happens after DOM update
-      requestAnimationFrame(() => {
+      setTimeout(() => {
         updateViewMode();
-      });
+      }, 0);
     }
   }
   
@@ -214,12 +214,12 @@ function updateViewMode() {
     DOM.editor.style.display = "none";
     DOM.chatView.style.display = "flex";
     // Always render chat view when switching to chat mode
-    // Use requestAnimationFrame to ensure DOM is ready after display change
-    requestAnimationFrame(() => {
+    // Use setTimeout to ensure DOM is ready after display change
+    setTimeout(() => {
       if (DOM.chatView && DOM.chatView.style.display !== "none") {
         renderChatView();
       }
-    });
+    }, 10);
   } else {
     DOM.editor.style.display = "block";
     DOM.chatView.style.display = "none";
