@@ -161,16 +161,27 @@ function updateChatToggleVisibility() {
         const activeOption = DOM.chatToggle.querySelector(".toggle-option.active");
         chatViewMode = activeOption.dataset.mode;
       }
+      // Force render when toggle first appears
+      updateViewMode();
     }
   }
   
   if (!isChatMethod && chatViewMode === "chat") {
     chatViewMode = "text";
+    updateViewMode();
   }
   
-  // Always update view mode after checking chat method status
-  if (isChatMethod || chatViewMode === "text") {
-    updateViewMode();
+  // Update generate button visibility
+  updateGenerateButtonVisibility();
+}
+
+function updateGenerateButtonVisibility() {
+  if (DOM.generateButton && DOM.generateButtonContainer) {
+    if (chatViewMode === "chat") {
+      DOM.generateButtonContainer.style.display = "none";
+    } else {
+      DOM.generateButtonContainer.style.display = "flex";
+    }
   }
 }
 
@@ -194,6 +205,9 @@ function updateViewMode() {
     DOM.editor.style.display = "block";
     DOM.chatView.style.display = "none";
   }
+  
+  // Update generate button visibility
+  updateGenerateButtonVisibility();
 }
 
 function validateChatML(text) {
@@ -244,25 +258,29 @@ function parseChatML(text) {
   // Safely trim the string - check if textStr is truthy and has trim method
   let trimmedText = "";
   try {
-    if (textStr && typeof textStr === "string" && textStr.trim) {
-      trimmedText = textStr.trim();
-    } else if (textStr && typeof textStr === "string") {
-      // Fallback if trim doesn't exist
-      trimmedText = textStr.replace(/^\s+|\s+$/g, "");
-    } else if (textStr != null && textStr !== undefined) {
+    if (textStr == null || textStr === undefined) {
+      trimmedText = "";
+    } else if (typeof textStr === "string") {
+      if (textStr.trim && typeof textStr.trim === "function") {
+        trimmedText = textStr.trim();
+      } else {
+        // Fallback if trim doesn't exist
+        trimmedText = textStr.replace(/^\s+|\s+$/g, "");
+      }
+    } else {
       const str = String(textStr);
-      if (str && str.trim) {
+      if (str && str.trim && typeof str.trim === "function") {
         trimmedText = str.trim();
       } else {
         trimmedText = str.replace(/^\s+|\s+$/g, "");
       }
-    } else {
-      trimmedText = "";
     }
   } catch (e) {
     // If trim fails, try manual replacement
     try {
-      if (textStr && typeof textStr === "string") {
+      if (textStr == null || textStr === undefined) {
+        trimmedText = "";
+      } else if (typeof textStr === "string") {
         trimmedText = textStr.replace(/^\s+|\s+$/g, "");
       } else {
         trimmedText = String(textStr || "").replace(/^\s+|\s+$/g, "");
@@ -273,7 +291,7 @@ function parseChatML(text) {
   }
   
   // Final safety check
-  if (trimmedText == null || trimmedText === undefined) {
+  if (trimmedText == null || trimmedText === undefined || typeof trimmedText !== "string") {
     trimmedText = "";
   }
   
