@@ -227,21 +227,27 @@ function parseChatML(text) {
   try {
     if (typeof text === "string") {
       textStr = text;
-    } else {
+    } else if (text != null) {
       textStr = String(text);
+    } else {
+      return [{ role: "user", content: "" }];
     }
   } catch (e) {
     return [{ role: "user", content: "" }];
   }
   
   // Ensure textStr is not null after conversion
-  if (textStr == null) {
+  if (textStr == null || textStr === undefined) {
     return [{ role: "user", content: "" }];
   }
   
   let trimmedText = "";
   try {
-    trimmedText = (textStr || "").trim();
+    if (textStr && typeof textStr.trim === "function") {
+      trimmedText = textStr.trim();
+    } else {
+      trimmedText = String(textStr || "");
+    }
   } catch (e) {
     trimmedText = "";
   }
@@ -454,15 +460,24 @@ function renderChatView() {
   
   let text = "";
   try {
-    text = (appState.focusedNode.cachedRenderText != null) 
-      ? String(appState.focusedNode.cachedRenderText) 
-      : "";
+    const node = appState.focusedNode;
+    if (node && node.cachedRenderText != null) {
+      text = String(node.cachedRenderText);
+    } else {
+      text = "";
+    }
   } catch (e) {
     console.warn("Error getting cachedRenderText:", e);
     text = "";
   }
   
-  const messages = parseChatML(text);
+  let messages = [];
+  try {
+    messages = parseChatML(text);
+  } catch (e) {
+    console.error("Error parsing ChatML:", e);
+    messages = [];
+  }
   
   if (!Array.isArray(messages) || messages.length === 0) {
     // Show empty state
@@ -666,7 +681,7 @@ function sendChatMessage() {
     return;
   }
   
-  const inputText = DOM.chatInput.value ? DOM.chatInput.value.trim() : "";
+  const inputText = DOM.chatInput.value ? String(DOM.chatInput.value).trim() : "";
   if (!inputText) return;
   
   if (!appState || !appState.focusedNode) {
@@ -675,10 +690,18 @@ function sendChatMessage() {
   }
   
   try {
-    const currentText = (appState.focusedNode.cachedRenderText != null)
-      ? String(appState.focusedNode.cachedRenderText)
+    const node = appState.focusedNode;
+    const currentText = (node && node.cachedRenderText != null)
+      ? String(node.cachedRenderText)
       : "";
-    let messages = parseChatML(currentText);
+    
+    let messages = [];
+    try {
+      messages = parseChatML(currentText);
+    } catch (e) {
+      console.warn("Error parsing current ChatML, starting fresh:", e);
+      messages = [];
+    }
     
     // Ensure messages is an array
     if (!Array.isArray(messages)) {
@@ -693,9 +716,9 @@ function sendChatMessage() {
     
     // Update the node
     appState.loomTree.updateNode(
-      appState.focusedNode,
+      node,
       chatML,
-      appState.focusedNode.summary
+      node.summary || "New message"
     );
     
     // Update editor value to keep in sync
@@ -705,7 +728,9 @@ function sendChatMessage() {
     
     // Clear input
     DOM.chatInput.value = "";
-    DOM.chatInput.style.height = "auto";
+    if (DOM.chatInput.style) {
+      DOM.chatInput.style.height = "auto";
+    }
     
     // Re-render chat view after a short delay to ensure DOM is updated
     setTimeout(() => {
@@ -713,15 +738,19 @@ function sendChatMessage() {
     }, 10);
     
     // Update search index
-    if (searchManager) {
-      searchManager.updateNode(appState.focusedNode, appState.loomTree.renderNode(appState.focusedNode));
+    if (searchManager && node) {
+      try {
+        searchManager.updateNode(node, appState.loomTree.renderNode(node));
+      } catch (e) {
+        console.warn("Error updating search index:", e);
+      }
     }
     
     // Update stats
     updateTreeStatsDisplay();
   } catch (error) {
     console.error("Error sending chat message:", error);
-    alert("Error sending message: " + error.message);
+    alert("Error sending message: " + (error.message || String(error)));
   }
 }
 
