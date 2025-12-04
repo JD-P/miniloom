@@ -241,6 +241,7 @@ function parseChatML(text) {
     return [{ role: "user", content: "" }];
   }
   
+  // Safely trim the string
   let trimmedText = "";
   try {
     if (textStr && typeof textStr === "string") {
@@ -250,12 +251,18 @@ function parseChatML(text) {
       } else {
         trimmedText = textStr.replace(/^\s+|\s+$/g, "");
       }
-    } else if (textStr != null) {
-      trimmedText = String(textStr).replace(/^\s+|\s+$/g, "");
+    } else if (textStr != null && textStr !== undefined) {
+      const str = String(textStr);
+      trimmedText = str.replace(/^\s+|\s+$/g, "");
     } else {
       trimmedText = "";
     }
   } catch (e) {
+    trimmedText = "";
+  }
+  
+  // Final safety check
+  if (trimmedText == null || trimmedText === undefined) {
     trimmedText = "";
   }
   
@@ -510,13 +517,21 @@ function renderChatView() {
       console.warn("Invalid message at index", index, msg);
       return;
     }
+    
+    // Ensure msg.role is valid
+    const role = msg.role || "user";
+    if (!["user", "assistant", "system"].includes(role)) {
+      console.warn("Invalid role in message at index", index, role);
+      return;
+    }
+    
     const messageDiv = document.createElement("div");
-    messageDiv.className = `chat-message ${msg.role}`;
+    messageDiv.className = `chat-message ${role}`;
     messageDiv.dataset.messageIndex = index;
     
     const header = document.createElement("div");
     header.className = "chat-message-header";
-    header.textContent = msg.role === "user" ? "User" : msg.role === "assistant" ? "AI Assistant" : "System";
+    header.textContent = role === "user" ? "User" : role === "assistant" ? "AI Assistant" : "System";
     
     // Message actions (copy/edit buttons)
     const actions = document.createElement("div");
@@ -565,7 +580,7 @@ function renderChatView() {
         saveEditedMessage(index, editTextarea.value);
       });
       
-      const isLastAssistant = msg.role === "assistant" && index === messages.length - 1;
+      const isLastAssistant = role === "assistant" && index === messages.length - 1;
       if (isLastAssistant) {
         const saveResubmitBtn = document.createElement("button");
         saveResubmitBtn.className = "chat-edit-btn save-resubmit-btn";
@@ -594,7 +609,7 @@ function renderChatView() {
     }
     
     content.dataset.messageIndex = index;
-    content.dataset.messageRole = msg.role;
+    content.dataset.messageRole = role;
     
     messageDiv.appendChild(header);
     messageDiv.appendChild(actions);
@@ -624,70 +639,102 @@ function cancelEditing() {
 }
 
 function saveEditedMessage(index, newContent) {
-  if (!appState.focusedNode) return;
+  if (!appState || !appState.focusedNode) return;
   
-  const text = appState.focusedNode.cachedRenderText;
-  const messages = parseChatML(text);
-  
-  if (messages[index]) {
-    messages[index].content = newContent.trim();
+  try {
+    const node = appState.focusedNode;
+    let text = "";
+    if (node && node.cachedRenderText != null) {
+      text = String(node.cachedRenderText || "");
+    }
+    
+    const messages = parseChatML(text);
+    
+    if (messages[index]) {
+      messages[index].content = String(newContent || "").trim();
+    }
+    
+    const chatML = JSON.stringify({ messages }, null, 2);
+    
+    appState.loomTree.updateNode(
+      node,
+      chatML,
+      node.summary || "Edited message"
+    );
+    
+    if (DOM.editor) {
+      DOM.editor.value = chatML;
+    }
+    
+    if (searchManager && node) {
+      try {
+        searchManager.updateNode(node, appState.loomTree.renderNode(node));
+      } catch (e) {
+        console.warn("Error updating search index:", e);
+      }
+    }
+    
+    editingMessageIndex = null;
+    renderChatView();
+    updateTreeStatsDisplay();
+  } catch (error) {
+    console.error("Error saving edited message:", error);
+    alert("Error saving message: " + (error.message || String(error)));
   }
-  
-  const chatML = JSON.stringify({ messages }, null, 2);
-  
-  appState.loomTree.updateNode(
-    appState.focusedNode,
-    chatML,
-    appState.focusedNode.summary
-  );
-  
-  DOM.editor.value = chatML;
-  
-  if (searchManager) {
-    searchManager.updateNode(appState.focusedNode, appState.loomTree.renderNode(appState.focusedNode));
-  }
-  
-  editingMessageIndex = null;
-  renderChatView();
-  updateTreeStatsDisplay();
 }
 
 function saveAndResubmitMessage(index, newContent) {
-  if (!appState.focusedNode) return;
+  if (!appState || !appState.focusedNode) return;
   
-  const text = appState.focusedNode.cachedRenderText;
-  const messages = parseChatML(text);
-  
-  if (messages[index]) {
-    messages[index].content = newContent.trim();
-  }
-  
-  const chatML = JSON.stringify({ messages }, null, 2);
-  
-  appState.loomTree.updateNode(
-    appState.focusedNode,
-    chatML,
-    appState.focusedNode.summary
-  );
-  
-  DOM.editor.value = chatML;
-  
-  if (searchManager) {
-    searchManager.updateNode(appState.focusedNode, appState.loomTree.renderNode(appState.focusedNode));
-  }
-  
-  editingMessageIndex = null;
-  renderChatView();
-  updateTreeStatsDisplay();
-  
-  // Generate new response (this will complete the assistant message)
-  if (llmService && appState.focusedNode) {
-    const validation = validateChatML(DOM.editor.value);
-    if (!validation.valid) {
-      alert(`Invalid ChatML: ${validation.error}`);
-      return;
+  try {
+    const node = appState.focusedNode;
+    let text = "";
+    if (node && node.cachedRenderText != null) {
+      text = String(node.cachedRenderText || "");
     }
-    llmService.generateNewResponses(appState.focusedNode.id);
+    
+    const messages = parseChatML(text);
+    
+    if (messages[index]) {
+      messages[index].content = String(newContent || "").trim();
+    }
+    
+    const chatML = JSON.stringify({ messages }, null, 2);
+    
+    appState.loomTree.updateNode(
+      node,
+      chatML,
+      node.summary || "Edited message"
+    );
+    
+    if (DOM.editor) {
+      DOM.editor.value = chatML;
+    }
+    
+    if (searchManager && node) {
+      try {
+        searchManager.updateNode(node, appState.loomTree.renderNode(node));
+      } catch (e) {
+        console.warn("Error updating search index:", e);
+      }
+    }
+    
+    editingMessageIndex = null;
+    renderChatView();
+    updateTreeStatsDisplay();
+    
+    // Generate new response (this will complete the assistant message)
+    if (llmService && node) {
+      const validation = validateChatML(DOM.editor ? DOM.editor.value : chatML);
+      if (!validation.valid) {
+        alert(`Invalid ChatML: ${validation.error}`);
+        return;
+      }
+      llmService.generateNewResponses(node.id);
+    }
+  } catch (error) {
+    console.error("Error saving and resubmitting message:", error);
+    alert("Error saving message: " + (error.message || String(error)));
   }
 }
 
