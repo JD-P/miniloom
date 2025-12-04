@@ -243,9 +243,14 @@ function parseChatML(text) {
   
   let trimmedText = "";
   try {
-    if (textStr && typeof textStr === "string" && typeof textStr.trim === "function") {
-      trimmedText = textStr.trim();
-    } else if (textStr) {
+    if (textStr && typeof textStr === "string") {
+      // Check if trim exists before calling
+      if (typeof textStr.trim === "function") {
+        trimmedText = textStr.trim();
+      } else {
+        trimmedText = textStr.replace(/^\s+|\s+$/g, "");
+      }
+    } else if (textStr != null) {
       trimmedText = String(textStr).replace(/^\s+|\s+$/g, "");
     } else {
       trimmedText = "";
