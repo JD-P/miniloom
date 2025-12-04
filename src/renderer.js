@@ -222,22 +222,26 @@ function parseChatML(text) {
     return [{ role: "user", content: "" }];
   }
   
-  if (typeof text !== "string") {
-    try {
-      text = String(text);
-    } catch (e) {
-      return [{ role: "user", content: "" }];
+  // Convert to string safely
+  let textStr = "";
+  try {
+    if (typeof text === "string") {
+      textStr = text;
+    } else {
+      textStr = String(text);
     }
+  } catch (e) {
+    return [{ role: "user", content: "" }];
   }
   
-  // Ensure text is not null after conversion
-  if (text == null) {
+  // Ensure textStr is not null after conversion
+  if (textStr == null) {
     return [{ role: "user", content: "" }];
   }
   
   let trimmedText = "";
   try {
-    trimmedText = (text || "").trim();
+    trimmedText = (textStr || "").trim();
   } catch (e) {
     trimmedText = "";
   }
@@ -438,6 +442,9 @@ function copyToClipboard(text) {
 function renderChatView() {
   if (!appState || !appState.focusedNode) {
     console.warn("Cannot render chat view: appState or focusedNode is null");
+    if (DOM.chatMessages) {
+      DOM.chatMessages.innerHTML = '<div class="chat-empty-state">No messages yet. Start a conversation!</div>';
+    }
     return;
   }
   if (!DOM.chatMessages) {
@@ -445,9 +452,16 @@ function renderChatView() {
     return;
   }
   
-  const text = (appState.focusedNode.cachedRenderText != null) 
-    ? String(appState.focusedNode.cachedRenderText) 
-    : "";
+  let text = "";
+  try {
+    text = (appState.focusedNode.cachedRenderText != null) 
+      ? String(appState.focusedNode.cachedRenderText) 
+      : "";
+  } catch (e) {
+    console.warn("Error getting cachedRenderText:", e);
+    text = "";
+  }
+  
   const messages = parseChatML(text);
   
   if (!Array.isArray(messages) || messages.length === 0) {
