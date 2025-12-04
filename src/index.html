@@ -6,10 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' data:; img-src 'self' data: https:; connect-src *; font-src 'self' data:;"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' data: https:; img-src 'self' data: https:; connect-src *; font-src 'self' data: https:;"
     />
     <link rel="stylesheet" href="main.css" />
-    <link rel="stylesheet" href="node_modules/highlight.js/styles/default.min.css" />
+    <link rel="stylesheet" href="../node_modules/highlight.js/styles/default.min.css" />
     <script>
       window.MathJax = {
         tex: {
@@ -24,7 +24,7 @@
         }
       };
     </script>
-    <script id="MathJax-script" async src="node_modules/mathjax/es5/tex-mml-chtml.js"></script>
+    <script id="MathJax-script" async src="../node_modules/mathjax/es5/tex-mml-chtml.js"></script>
   </head>
   <body>
     <div id="tree-stats-tooltip" class="tooltip" style="display: none"></div>
@@ -221,8 +221,8 @@
         style="display: none"
       ></div>
     </div>
-    <script src="node_modules/marked/marked.min.js"></script>
-    <script src="node_modules/highlight.js/lib/highlight.min.js"></script>
+    <script src="../node_modules/marked/marked.min.js"></script>
+    <script src="../node_modules/highlight.js/lib/highlight.min.js"></script>
     <script src="utils.js"></script>
     <script src="model.js"></script>
     <script src="llm-service.js"></script>
