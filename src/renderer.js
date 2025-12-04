@@ -230,9 +230,14 @@ function parseChatML(text) {
     }
   }
   
-  let trimmedText;
+  // Ensure text is not null after conversion
+  if (text == null) {
+    return [{ role: "user", content: "" }];
+  }
+  
+  let trimmedText = "";
   try {
-    trimmedText = text.trim();
+    trimmedText = (text || "").trim();
   } catch (e) {
     trimmedText = "";
   }
@@ -276,11 +281,13 @@ function getMessageContent(msg) {
 
 // Safe markdown renderer with whitelist
 function renderMarkdown(text) {
-  if (!text) return "";
+  if (!text && text !== 0) return "";
+  
+  const textStr = String(text || "");
   
   if (!window.marked) {
     // Fallback if marked isn't loaded
-    return escapeHtml(String(text)).replace(/\n/g, "<br>");
+    return escapeHtml(textStr).replace(/\n/g, "<br>");
   }
   
   // Configure marked with safe options
@@ -360,7 +367,7 @@ function renderMarkdown(text) {
   });
   
   // Render markdown
-  let html = marked.parse(String(text));
+  let html = marked.parse(textStr);
   
   // Sanitize the HTML
   html = sanitizeHtml(html);
@@ -400,8 +407,9 @@ function renderMarkdown(text) {
 }
 
 function escapeHtml(text) {
+  if (text == null) return "";
   const div = document.createElement('div');
-  div.textContent = text;
+  div.textContent = String(text);
   return div.innerHTML;
 }
 
@@ -437,7 +445,9 @@ function renderChatView() {
     return;
   }
   
-  const text = appState.focusedNode.cachedRenderText || "";
+  const text = (appState.focusedNode.cachedRenderText != null) 
+    ? String(appState.focusedNode.cachedRenderText) 
+    : "";
   const messages = parseChatML(text);
   
   if (!Array.isArray(messages) || messages.length === 0) {
@@ -651,8 +661,10 @@ function sendChatMessage() {
   }
   
   try {
-    const currentText = appState.focusedNode.cachedRenderText || "";
-    const messages = parseChatML(currentText);
+    const currentText = (appState.focusedNode.cachedRenderText != null)
+      ? String(appState.focusedNode.cachedRenderText)
+      : "";
+    let messages = parseChatML(currentText);
     
     // Ensure messages is an array
     if (!Array.isArray(messages)) {
