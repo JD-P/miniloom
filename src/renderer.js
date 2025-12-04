@@ -163,6 +163,12 @@ function updateChatToggleVisibility() {
       }
       
       // Force update the view mode immediately
+      // Use setTimeout to ensure DOM is ready after visibility change
+      setTimeout(() => {
+        updateViewMode();
+      }, 0);
+    } else if (isChatMethod && wasVisible) {
+      // Toggle was already visible, just ensure view mode is synced
       updateViewMode();
     }
   }
@@ -182,10 +188,10 @@ function updateViewMode() {
     DOM.editor.style.display = "none";
     DOM.chatView.style.display = "flex";
     // Always render chat view when switching to chat mode
-    // Use requestAnimationFrame to ensure DOM is ready
-    requestAnimationFrame(() => {
+    // Use a small delay to ensure DOM is ready
+    setTimeout(() => {
       renderChatView();
-    });
+    }, 10);
   } else {
     DOM.editor.style.display = "block";
     DOM.chatView.style.display = "none";
@@ -647,10 +653,8 @@ function updateUI() {
   // If we're in chat mode and the chat view should be visible, ensure it's rendered
   if (chatViewMode === "chat" && isChatCompletionMethod()) {
     if (DOM.chatView && DOM.chatView.style.display !== "none") {
-      // Only render if chat messages container is empty or needs refresh
-      if (!DOM.chatMessages || DOM.chatMessages.children.length === 0) {
-        renderChatView();
-      }
+      // Always render to ensure content is up to date
+      renderChatView();
     }
   }
 
@@ -1277,6 +1281,7 @@ async function init() {
           chatViewMode = mode;
           toggleOptions.forEach(opt => opt.classList.remove("active"));
           option.classList.add("active");
+          // Force immediate view update when manually toggling
           updateViewMode();
         });
       });
