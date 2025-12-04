@@ -243,7 +243,7 @@ function parseChatML(text) {
   
   let trimmedText = "";
   try {
-    if (textStr && typeof textStr.trim === "function") {
+    if (textStr && typeof textStr === "string" && typeof textStr.trim === "function") {
       trimmedText = textStr.trim();
     } else if (textStr) {
       trimmedText = String(textStr).replace(/^\s+|\s+$/g, "");
