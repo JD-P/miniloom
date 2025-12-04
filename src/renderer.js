@@ -74,6 +74,7 @@ const DOM = {
   chatMessages: document.getElementById("chat-messages"),
   chatInput: document.getElementById("chat-input"),
   chatSendButton: document.getElementById("chat-send-button"),
+  generateButtonContainer: document.getElementById("generate-button-container"),
 };
 
 /*
@@ -166,11 +167,10 @@ function updateChatToggleVisibility() {
           chatViewMode = "chat";
         }
       }
-      // Force render when toggle first appears
-      // Use setTimeout to ensure DOM is fully ready
-      setTimeout(() => {
+      // Force render when toggle first appears - ensure it happens after DOM update
+      requestAnimationFrame(() => {
         updateViewMode();
-      }, 0);
+      });
     }
   }
   
@@ -191,6 +191,14 @@ function updateGenerateButtonVisibility() {
       DOM.generateButtonContainer.style.display = "flex";
     }
   }
+  // Also hide/show the generate button itself
+  if (DOM.generateButton) {
+    if (chatViewMode === "chat") {
+      DOM.generateButton.style.display = "none";
+    } else {
+      DOM.generateButton.style.display = "flex";
+    }
+  }
 }
 
 function updateViewMode() {
@@ -206,12 +214,12 @@ function updateViewMode() {
     DOM.editor.style.display = "none";
     DOM.chatView.style.display = "flex";
     // Always render chat view when switching to chat mode
-    // Use setTimeout to ensure DOM is ready after display change
-    setTimeout(() => {
+    // Use requestAnimationFrame to ensure DOM is ready after display change
+    requestAnimationFrame(() => {
       if (DOM.chatView && DOM.chatView.style.display !== "none") {
         renderChatView();
       }
-    }, 0);
+    });
   } else {
     DOM.editor.style.display = "block";
     DOM.chatView.style.display = "none";
@@ -292,16 +300,17 @@ function parseChatML(text) {
   try {
     const data = JSON.parse(trimmedText);
     if (data && data.messages && Array.isArray(data.messages)) {
-      return data.messages;
+      // Validate messages array
+      return data.messages.filter(msg => msg && typeof msg === "object" && msg.role && msg.content);
     }
     // Fallback: treat as single user message if it's not valid JSON
-    if (trimmedText) {
+    if (trimmedText && trimmedText.length > 0) {
       return [{ role: "user", content: trimmedText }];
     }
     return [];
   } catch (error) {
     // If not valid JSON, treat as single user message
-    if (trimmedText) {
+    if (trimmedText && trimmedText.length > 0) {
       return [{ role: "user", content: trimmedText }];
     }
     return [];
@@ -847,10 +856,10 @@ function sendChatMessage() {
       DOM.chatInput.style.height = "auto";
     }
     
-    // Re-render chat view - use setTimeout to ensure state is updated
-    setTimeout(() => {
+    // Re-render chat view - use requestAnimationFrame to ensure state is updated
+    requestAnimationFrame(() => {
       renderChatView();
-    }, 10);
+    });
     
     // Update search index
     if (searchManager && node) {
