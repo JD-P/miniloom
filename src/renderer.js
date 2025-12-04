@@ -171,6 +171,16 @@ function updateChatToggleVisibility() {
   
   // Update generate button visibility
   updateGenerateButtonVisibility();
+  
+  // If we're in chat mode and chat method is available, ensure view is rendered
+  if (isChatMethod && chatViewMode === "chat") {
+    // Ensure chat view is rendered
+    setTimeout(() => {
+      if (DOM.chatView && DOM.chatView.style.display !== "none") {
+        renderChatView();
+      }
+    }, 10);
+  }
 }
 
 function updateGenerateButtonVisibility() {
@@ -272,16 +282,21 @@ function parseChatML(text) {
     return [];
   }
   
-  // Safely trim the string
+  // Safely trim the string - handle null/undefined before calling trim
   let trimmedText = "";
   try {
-    trimmedText = textStr.trim();
+    if (textStr && typeof textStr.trim === "function") {
+      trimmedText = textStr.trim();
+    } else {
+      // Fallback: use replace if trim fails
+      trimmedText = textStr.replace(/^\s+|\s+$/g, "");
+    }
   } catch (e) {
     // Fallback: use replace if trim fails
     try {
       trimmedText = textStr.replace(/^\s+|\s+$/g, "");
     } catch (e2) {
-      trimmedText = textStr;
+      trimmedText = textStr || "";
     }
   }
   
@@ -892,6 +907,15 @@ function updateUI() {
   // Update chat toggle visibility and sync view mode
   // This may change chatViewMode and call updateViewMode()
   updateChatToggleVisibility();
+  
+  // If we're in chat mode, ensure it's rendered
+  if (chatViewMode === "chat" && isChatCompletionMethod()) {
+    setTimeout(() => {
+      if (DOM.chatView && DOM.chatView.style.display !== "none") {
+        renderChatView();
+      }
+    }, 10);
+  }
 
   if (treeNav) {
     treeNav.updateTreeView();
@@ -1518,6 +1542,12 @@ async function init() {
           option.classList.add("active");
           // Force immediate view update when manually toggling
           updateViewMode();
+          // Ensure chat view is rendered if switching to chat mode
+          if (mode === "chat") {
+            setTimeout(() => {
+              renderChatView();
+            }, 10);
+          }
         });
       });
     }
