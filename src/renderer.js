@@ -217,6 +217,10 @@ function validateChatML(text) {
 }
 
 function parseChatML(text) {
+  if (!text || typeof text !== "string") {
+    return [{ role: "user", content: "" }];
+  }
+  
   try {
     const data = JSON.parse(text);
     if (data.messages && Array.isArray(data.messages)) {
@@ -232,18 +236,20 @@ function parseChatML(text) {
 
 // Extract content from message, handling reasoning/answer fields
 function getMessageContent(msg) {
+  if (!msg) return "";
+  
   if (msg.content) {
-    return msg.content;
+    return String(msg.content);
   }
   // Handle reasoning/answer structure (OpenRouter format)
   if (msg.reasoning && msg.answer) {
-    return `**Reasoning:**\n${msg.reasoning}\n\n**Answer:**\n${msg.answer}`;
+    return `**Reasoning:**\n${String(msg.reasoning)}\n\n**Answer:**\n${String(msg.answer)}`;
   }
   if (msg.answer) {
-    return msg.answer;
+    return String(msg.answer);
   }
   if (msg.reasoning) {
-    return msg.reasoning;
+    return String(msg.reasoning);
   }
   return "";
 }
@@ -401,8 +407,9 @@ function copyToClipboard(text) {
 
 function renderChatView() {
   if (!appState.focusedNode) return;
+  if (!DOM.chatMessages) return;
   
-  const text = appState.focusedNode.cachedRenderText;
+  const text = appState.focusedNode.cachedRenderText || "";
   const messages = parseChatML(text);
   
   DOM.chatMessages.innerHTML = "";
@@ -420,7 +427,7 @@ function renderChatView() {
     const actions = document.createElement("div");
     actions.className = "chat-message-actions";
     
-    const messageContent = getMessageContent(msg);
+    const messageContent = getMessageContent(msg) || "";
     
     const copyBtn = document.createElement("button");
     copyBtn.className = "chat-action-btn copy-btn";
@@ -592,12 +599,12 @@ function saveAndResubmitMessage(index, newContent) {
 // Removed updateChatMLFromUI - now using explicit save functions
 
 function sendChatMessage() {
-  const inputText = DOM.chatInput.value.trim();
+  const inputText = DOM.chatInput?.value?.trim();
   if (!inputText) return;
   
   if (!appState.focusedNode) return;
   
-  const currentText = appState.focusedNode.cachedRenderText;
+  const currentText = appState.focusedNode.cachedRenderText || "";
   const messages = parseChatML(currentText);
   
   // Add new user message
@@ -613,11 +620,15 @@ function sendChatMessage() {
   );
   
   // Update editor value to keep in sync
-  DOM.editor.value = chatML;
+  if (DOM.editor) {
+    DOM.editor.value = chatML;
+  }
   
   // Clear input
-  DOM.chatInput.value = "";
-  DOM.chatInput.style.height = "auto";
+  if (DOM.chatInput) {
+    DOM.chatInput.value = "";
+    DOM.chatInput.style.height = "auto";
+  }
   
   // Re-render chat view
   renderChatView();
