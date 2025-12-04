@@ -161,16 +161,15 @@ function updateChatToggleVisibility() {
         const activeOption = DOM.chatToggle.querySelector(".toggle-option.active");
         chatViewMode = activeOption.dataset.mode;
       }
-      
-      // Force update the view mode immediately
-      updateViewMode();
-    } else if (isChatMethod && wasVisible) {
-      // Toggle was already visible, just ensure view mode is synced
-      updateViewMode();
     }
   }
+  
   if (!isChatMethod && chatViewMode === "chat") {
     chatViewMode = "text";
+  }
+  
+  // Always update view mode after checking chat method status
+  if (isChatMethod || chatViewMode === "text") {
     updateViewMode();
   }
 }
@@ -185,10 +184,12 @@ function updateViewMode() {
     DOM.editor.style.display = "none";
     DOM.chatView.style.display = "flex";
     // Always render chat view when switching to chat mode
-    // Use setTimeout to ensure DOM is ready after display change
-    setTimeout(() => {
-      renderChatView();
-    }, 0);
+    // Use requestAnimationFrame to ensure DOM is ready after display change
+    requestAnimationFrame(() => {
+      if (DOM.chatView && DOM.chatView.style.display !== "none") {
+        renderChatView();
+      }
+    });
   } else {
     DOM.editor.style.display = "block";
     DOM.chatView.style.display = "none";
@@ -646,20 +647,6 @@ function updateUI() {
   // Update chat toggle visibility and sync view mode
   // This may change chatViewMode and call updateViewMode()
   updateChatToggleVisibility();
-  
-  // If we're in chat mode and the chat view should be visible, ensure it's rendered
-  // This handles the case where updateChatToggleVisibility() set chatViewMode to "chat"
-  // but updateViewMode() might not have rendered yet
-  if (chatViewMode === "chat" && isChatCompletionMethod()) {
-    if (DOM.chatView && DOM.chatView.style.display !== "none") {
-      // Use setTimeout to ensure this happens after updateViewMode() completes
-      setTimeout(() => {
-        if (DOM.chatView && DOM.chatView.style.display !== "none") {
-          renderChatView();
-        }
-      }, 10);
-    }
-  }
 
   if (treeNav) {
     treeNav.updateTreeView();
