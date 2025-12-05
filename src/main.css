@@ -687,9 +687,15 @@ select {
   line-height: 1.5;
 }
 
-.chat-message-content .math-inline,
+.chat-message-content .math-inline {
+  /* Inline math should not add margins */
+}
+
 .chat-message-content .math-display {
-  margin: 8px 0;
+  display: block;
+  margin: 16px 0;
+  text-align: center;
+  overflow-x: auto;
 }
 
 /* MathJax SVG output styling */

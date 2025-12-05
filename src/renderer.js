@@ -584,7 +584,7 @@ function sanitizeHtml(html) {
 function renderMarkdown(text) {
   if (!text && text !== 0) return "";
 
-  const textStr = String(text || "");
+  let textStr = String(text || "");
 
   if (!window.marked) {
     // Fallback if marked isn't loaded
@@ -593,6 +593,59 @@ function renderMarkdown(text) {
 
   // Configure marked on first use
   configureMarked();
+
+  // Protect math expressions from marked processing
+  // Marked strips backslashes from \[ and \] so we need to protect them
+  const mathPlaceholders = [];
+  let placeholderIndex = 0;
+
+  // Protect \[...\] display math (including multi-line)
+  textStr = textStr.replace(/\\\[([\s\S]+?)\\\]/g, (match, formula) => {
+    const placeholder = `%%MATH_DISPLAY_${placeholderIndex}%%`;
+    mathPlaceholders.push({
+      placeholder,
+      type: "display",
+      formula: formula.trim(),
+    });
+    placeholderIndex++;
+    return placeholder;
+  });
+
+  // Protect \(...\) inline math (including multi-line)
+  textStr = textStr.replace(/\\\(([\s\S]+?)\\\)/g, (match, formula) => {
+    const placeholder = `%%MATH_INLINE_${placeholderIndex}%%`;
+    mathPlaceholders.push({
+      placeholder,
+      type: "inline",
+      formula: formula.trim(),
+    });
+    placeholderIndex++;
+    return placeholder;
+  });
+
+  // Protect $$...$$ display math (including multi-line)
+  textStr = textStr.replace(/\$\$([\s\S]+?)\$\$/g, (match, formula) => {
+    const placeholder = `%%MATH_DISPLAY_${placeholderIndex}%%`;
+    mathPlaceholders.push({
+      placeholder,
+      type: "display",
+      formula: formula.trim(),
+    });
+    placeholderIndex++;
+    return placeholder;
+  });
+
+  // Protect $...$ inline math (single line only to avoid false positives)
+  textStr = textStr.replace(/(?<!\$)\$([^$\n]+?)\$(?!\$)/g, (match, formula) => {
+    const placeholder = `%%MATH_INLINE_${placeholderIndex}%%`;
+    mathPlaceholders.push({
+      placeholder,
+      type: "inline",
+      formula: formula.trim(),
+    });
+    placeholderIndex++;
+    return placeholder;
+  });
 
   // Render markdown
   let html;
@@ -622,24 +675,20 @@ function renderMarkdown(text) {
   // Sanitize the HTML
   html = sanitizeHtml(html);
 
-  // Process LaTeX math expressions
-  // First handle display math: $$...$$
-  html = html.replace(/\$\$([^$]+?)\$\$/g, (match, formula) => {
-    return `<div class="math-display">\\[${escapeHtml(formula)}\\]</div>`;
-  });
-
-  // Then handle inline math: $...$ (but not $$ which we already processed)
-  html = html.replace(/\$([^$\n]+?)\$/g, (match, formula) => {
-    return `<span class="math-inline">\\(${escapeHtml(formula)}\\)</span>`;
-  });
-
-  // Also handle \(...\) and \[...\] if not already processed
-  html = html.replace(/\\\(([^)]+?)\\\)/g, (match, formula) => {
-    return `<span class="math-inline">\\(${escapeHtml(formula)}\\)</span>`;
-  });
-  html = html.replace(/\\\[([^\]]+?)\\\]/g, (match, formula) => {
-    return `<div class="math-display">\\[${escapeHtml(formula)}\\]</div>`;
-  });
+  // Restore math expressions from placeholders
+  for (const { placeholder, type, formula } of mathPlaceholders) {
+    if (type === "display") {
+      html = html.replace(
+        placeholder,
+        `<span class="math-display" style="display:block;">\\[${formula}\\]</span>`
+      );
+    } else {
+      html = html.replace(
+        placeholder,
+        `<span class="math-inline">\\(${formula}\\)</span>`
+      );
+    }
+  }
 
   return html;
 }
@@ -647,36 +696,96 @@ function renderMarkdown(text) {
 // Queue MathJax typesetting with debouncing to avoid conflicts
 let mathJaxQueue = [];
 let mathJaxTimeout = null;
+let mathJaxRenderGeneration = 0;
+
+async function waitForMathJax() {
+  // Wait for MathJax to be fully loaded
+  if (window.MathJax && window.MathJax.startup && window.MathJax.startup.promise) {
+    await window.MathJax.startup.promise;
+    return true;
+  }
+  // Fallback: check if typesetPromise exists
+  if (window.MathJax && window.MathJax.typesetPromise) {
+    return true;
+  }
+  return false;
+}
 
 function queueMathJaxTypesetting() {
   if (mathJaxTimeout) {
     clearTimeout(mathJaxTimeout);
   }
 
-  mathJaxTimeout = setTimeout(() => {
-    if (window.MathJax && window.MathJax.typesetPromise) {
-      // Find all math elements that are currently in the DOM
-      const mathElements = document.querySelectorAll(
-        ".chat-message-content .math-inline, .chat-message-content .math-display"
+  // Increment generation to invalidate any pending typesets
+  const currentGeneration = ++mathJaxRenderGeneration;
+
+  mathJaxTimeout = setTimeout(async () => {
+    // Check if this is still the current generation
+    if (currentGeneration !== mathJaxRenderGeneration) {
+      return;
+    }
+
+    // Wait for MathJax to be ready
+    const mathJaxReady = await waitForMathJax();
+    if (!mathJaxReady) {
+      return;
+    }
+
+    // Check generation again after waiting
+    if (currentGeneration !== mathJaxRenderGeneration) {
+      return;
+    }
+
+    // Find all math elements that haven't been typeset yet
+    const mathElements = document.querySelectorAll(
+      ".chat-message-content .math-inline:not([data-mathjax-typeset]), .chat-message-content .math-display:not([data-mathjax-typeset])"
+    );
+
+    if (mathElements.length > 0) {
+      // Filter to only elements that are still in the document
+      const validElements = Array.from(mathElements).filter(el =>
+        document.body.contains(el)
       );
 
-      if (mathElements.length > 0) {
-        // Filter to only elements that are still in the document
-        const validElements = Array.from(mathElements).filter(el =>
-          document.body.contains(el)
-        );
+      if (validElements.length > 0) {
+        // Mark elements as being processed
+        validElements.forEach(el => el.setAttribute("data-mathjax-pending", "true"));
 
-        if (validElements.length > 0) {
-          window.MathJax.typesetPromise(validElements).catch(err => {
-            // Only log if it's not a replaceChild error (which happens during re-renders)
-            if (!err.message || !err.message.includes("replaceChild")) {
-              console.warn("MathJax rendering error:", err);
+        try {
+          // Check generation again before typesetting
+          if (currentGeneration !== mathJaxRenderGeneration) {
+            return;
+          }
+
+          // Use MathJax to clear and retypeset
+          if (window.MathJax.typesetClear) {
+            window.MathJax.typesetClear(validElements);
+          }
+          await window.MathJax.typesetPromise(validElements);
+
+          // Mark as successfully typeset
+          validElements.forEach(el => {
+            if (document.body.contains(el)) {
+              el.removeAttribute("data-mathjax-pending");
+              el.setAttribute("data-mathjax-typeset", "true");
             }
           });
+        } catch (err) {
+          // Clean up pending markers
+          validElements.forEach(el => {
+            if (document.body.contains(el)) {
+              el.removeAttribute("data-mathjax-pending");
+            }
+          });
+
+          // Only log if it's not a replaceChild error (which happens during re-renders)
+          if (!err.message || !err.message.includes("replaceChild")) {
+            console.warn("MathJax rendering error:", err);
+          }
         }
       }
     }
-  }, 200);
+  }, 150);
 }
 
 function escapeHtml(text) {
