@@ -21,16 +21,22 @@
           processEscapes: true,
           processEnvironments: true,
         },
+        svg: {
+          fontCache: "local",
+        },
         options: {
           skipHtmlTags: ["script", "noscript", "style", "textarea", "pre"],
           ignoreHtmlClass: "no-math",
+        },
+        startup: {
+          typeset: false, // Don't typeset on page load, we'll do it manually
         },
       };
     </script>
     <script
       id="MathJax-script"
       async
-      src="../node_modules/mathjax/tex-mml-chtml.js"
+      src="../node_modules/mathjax/tex-mml-svg.js"
     ></script>
   </head>
   <body>

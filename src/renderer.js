@@ -738,7 +738,15 @@ function copyToClipboard(text, buttonElement = null) {
   }
 }
 
-function renderChatView() {
+function renderChatView(options = {}) {
+  const { preserveScroll = false, scrollToMessage = null } = options;
+
+  // Save scroll position before re-rendering if needed
+  let savedScrollTop = 0;
+  if (preserveScroll && DOM.chatMessages) {
+    savedScrollTop = DOM.chatMessages.scrollTop;
+  }
+
   if (!appState || !appState.focusedNode) {
     console.warn("Cannot render chat view: appState or focusedNode is null");
     if (DOM.chatMessages) {
@@ -1003,10 +1011,27 @@ function renderChatView() {
     DOM.chatMessages.appendChild(loadingDiv);
   }
 
-  // Scroll to bottom
+  // Handle scroll position
   setTimeout(() => {
     if (DOM.chatMessages) {
-      DOM.chatMessages.scrollTop = DOM.chatMessages.scrollHeight;
+      if (scrollToMessage !== null) {
+        // Scroll to the specific message being edited
+        const messageElement = DOM.chatMessages.querySelector(
+          `[data-message-index="${scrollToMessage}"]`
+        );
+        if (messageElement) {
+          messageElement.scrollIntoView({
+            block: "center",
+            behavior: "instant",
+          });
+        }
+      } else if (preserveScroll) {
+        // Restore the saved scroll position
+        DOM.chatMessages.scrollTop = savedScrollTop;
+      } else {
+        // Default: scroll to bottom
+        DOM.chatMessages.scrollTop = DOM.chatMessages.scrollHeight;
+      }
     }
   }, 0);
 
@@ -1063,12 +1088,12 @@ function setChatGenerationLoading(isLoading) {
 
 function startEditingMessage(index, msg) {
   editingMessageIndex = index;
-  renderChatView();
+  renderChatView({ preserveScroll: true, scrollToMessage: index });
 }
 
 function cancelEditing() {
   editingMessageIndex = null;
-  renderChatView();
+  renderChatView({ preserveScroll: true });
 }
 
 async function saveEditedMessage(index, newContent) {

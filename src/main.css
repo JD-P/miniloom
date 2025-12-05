@@ -692,6 +692,22 @@ select {
   margin: 8px 0;
 }
 
+/* MathJax SVG output styling */
+.chat-message-content mjx-container {
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
+}
+
+.chat-message-content mjx-container[jax="SVG"] {
+  direction: ltr;
+}
+
+.chat-message-content mjx-container svg {
+  max-width: 100%;
+  height: auto;
+}
+
 /* Reasoning block styling */
 .chat-message-content .reasoning-block {
   margin: 0 0 16px 0;

@@ -441,6 +441,9 @@ class LLMService {
       topK: parseInt(samplerData["top-k"]) || 100,
       repetitionPenalty: parseFloat(samplerData["repetition-penalty"]) || 1,
 
+      // Chat completion settings
+      systemPrompt: samplerData["system-prompt"] || "",
+
       // Reasoning parameters (for OpenRouter models that support it)
       reasoningEnabled:
         samplerData["reasoning-enabled"] === true ||
@@ -610,7 +613,7 @@ class LLMService {
         const rollFocus = loomTree.nodeStore[nodeId];
         const promptText = loomTree.renderNode(rollFocus);
 
-        const chatData = this.parseChatData(promptText);
+        const chatData = this.parseChatData(promptText, params.systemPrompt);
         const requestBody = this.buildChatRequestBody(chatData, params);
         const headers = this.buildChatRequestHeaders(params);
 
@@ -642,7 +645,7 @@ class LLMService {
         const rollFocus = loomTree.nodeStore[nodeId];
         const promptText = loomTree.renderNode(rollFocus);
 
-        const chatData = this.parseChatData(promptText);
+        const chatData = this.parseChatData(promptText, params.systemPrompt);
         const authToken = `Bearer ${params.apiKey}`;
         const apiDelay = Number(params.apiDelay || 0);
 
@@ -913,17 +916,36 @@ class LLMService {
   }
 
   // Chat-specific utilities
-  parseChatData(promptText) {
+  parseChatData(promptText, systemPrompt = "") {
     try {
       const chatData = JSON.parse(promptText);
       if (!chatData.messages || !Array.isArray(chatData.messages)) {
         throw new Error("Invalid chat format: messages array not found");
       }
+
+      // Add system prompt if configured and not already present
+      if (systemPrompt && systemPrompt.trim()) {
+        const hasSystemMessage = chatData.messages.some(
+          msg => msg.role === "system"
+        );
+        if (!hasSystemMessage) {
+          chatData.messages.unshift({
+            role: "system",
+            content: systemPrompt.trim(),
+          });
+        }
+      }
+
       return chatData;
     } catch (jsonError) {
-      return {
-        messages: [{ role: "user", content: promptText.trim() }],
-      };
+      const messages = [{ role: "user", content: promptText.trim() }];
+
+      // Add system prompt if configured
+      if (systemPrompt && systemPrompt.trim()) {
+        messages.unshift({ role: "system", content: systemPrompt.trim() });
+      }
+
+      return { messages };
     }
   }
 
