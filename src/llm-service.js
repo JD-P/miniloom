@@ -440,6 +440,12 @@ class LLMService {
       topP: parseFloat(samplerData["top-p"]) || 1,
       topK: parseInt(samplerData["top-k"]) || 100,
       repetitionPenalty: parseFloat(samplerData["repetition-penalty"]) || 1,
+
+      // Reasoning parameters (for OpenRouter models that support it)
+      reasoningEnabled:
+        samplerData["reasoning-enabled"] === true ||
+        samplerData["reasoning-enabled"] === "true",
+      reasoningEffort: samplerData["reasoning-effort"] || "medium",
     };
   }
 
@@ -653,6 +659,14 @@ class LLMService {
             top_k: Number(params.topK),
             repetition_penalty: Number(params.repetitionPenalty),
           };
+
+          // Add reasoning parameters if enabled (for models that support it)
+          if (params.reasoningEnabled) {
+            body.reasoning = {
+              enabled: true,
+              effort: params.reasoningEffort || "medium",
+            };
+          }
 
           const promise = HTTPClient.delay(apiDelay * i).then(() => {
             const headers = {

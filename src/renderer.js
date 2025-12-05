@@ -108,6 +108,58 @@ let chatViewMode = "text"; // "text" or "chat"
 let editingMessageIndex = null; // Index of message being edited, or null
 let chatGenerationInProgress = false; // Track if generation is in progress
 
+// Validate that required settings are configured before generation
+function validateGenerationSettings() {
+  const samplerSettingsStore = appState.getSamplerSettingsStore();
+  const selectedApiKeyName = DOM.apiKeySelector?.value || "";
+
+  // Check if API key is selected
+  if (!selectedApiKeyName || selectedApiKeyName === "") {
+    // Flash the API key dropdown
+    flashElement(DOM.apiKeySelector, "warning-flash");
+
+    // Show user-friendly error
+    showChatError(
+      "You must select an API key before you can use chat completions"
+    );
+    return false;
+  }
+
+  // Check if the API key actually has a value
+  const apiKey = samplerSettingsStore["api-keys"]?.[selectedApiKeyName] || "";
+  if (!apiKey || apiKey.trim() === "") {
+    flashElement(DOM.apiKeySelector, "warning-flash");
+    showChatError(
+      "The selected API key is empty. Please configure it in settings."
+    );
+    return false;
+  }
+
+  return true;
+}
+
+// Flash an element with a CSS class for visual feedback
+function flashElement(element, className, duration = 2000) {
+  if (!element) return;
+
+  element.classList.add(className);
+  setTimeout(() => {
+    element.classList.remove(className);
+  }, duration);
+}
+
+// Show error in the chat context
+function showChatError(message) {
+  // Use the existing error display system
+  if (DOM.errorMsgEl && DOM.errorsEl) {
+    DOM.errorMsgEl.textContent = message;
+    DOM.errorsEl.classList.add("has-error");
+  }
+
+  // Also clear the loading state
+  setChatGenerationLoading(false);
+}
+
 function isChatCompletionMethod() {
   if (!llmService) return false;
   try {
@@ -374,6 +426,131 @@ function getMessageContent(msg) {
   return "";
 }
 
+// Configure marked once at startup
+let markedConfigured = false;
+
+function configureMarked() {
+  if (markedConfigured || !window.marked) return;
+
+  try {
+    // Custom code block renderer for marked v17+
+    const renderer = {
+      code(token) {
+        // In marked v17+, code receives a token object
+        const text =
+          typeof token === "object" ? token.text || "" : String(token || "");
+        const lang = typeof token === "object" ? token.lang || "" : "";
+        const escaped = escapeHtml(text);
+        return `<div class="code-block"><pre><code class="language-${lang}">${escaped}</code></pre></div>`;
+      },
+    };
+
+    marked.use({
+      renderer,
+      breaks: true,
+      gfm: true,
+      async: false, // Ensure synchronous parsing
+    });
+
+    markedConfigured = true;
+  } catch (e) {
+    console.warn("Failed to configure marked:", e);
+  }
+}
+
+// Whitelist of allowed HTML tags
+const ALLOWED_HTML_TAGS = [
+  "p",
+  "br",
+  "strong",
+  "em",
+  "u",
+  "s",
+  "code",
+  "pre",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "ul",
+  "ol",
+  "li",
+  "blockquote",
+  "table",
+  "thead",
+  "tbody",
+  "tr",
+  "th",
+  "td",
+  "a",
+  "div",
+];
+
+// Sanitize HTML to only allow whitelisted tags
+function sanitizeHtml(html) {
+  if (typeof html !== "string") {
+    html = String(html || "");
+  }
+  const div = document.createElement("div");
+  div.innerHTML = html;
+
+  const walker = document.createTreeWalker(
+    div,
+    NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT,
+    null
+  );
+
+  const nodesToRemove = [];
+  let node;
+
+  while ((node = walker.nextNode())) {
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      if (!ALLOWED_HTML_TAGS.includes(node.tagName.toLowerCase())) {
+        nodesToRemove.push(node);
+      } else {
+        const tagName = node.tagName.toLowerCase();
+        if (tagName === "a") {
+          const href = node.getAttribute("href");
+          if (
+            href &&
+            (href.startsWith("http://") || href.startsWith("https://"))
+          ) {
+            node.setAttribute("target", "_blank");
+            node.setAttribute("rel", "noopener noreferrer");
+          } else {
+            node.removeAttribute("href");
+          }
+        }
+        // Keep class attribute for code blocks and divs
+        const keepClass =
+          tagName === "code" || tagName === "div" || tagName === "pre";
+        Array.from(node.attributes).forEach(attr => {
+          if (
+            attr.name !== "href" &&
+            attr.name !== "target" &&
+            attr.name !== "rel" &&
+            !(keepClass && attr.name === "class")
+          ) {
+            node.removeAttribute(attr.name);
+          }
+        });
+      }
+    }
+  }
+
+  nodesToRemove.forEach(n => {
+    const parent = n.parentNode;
+    while (n.firstChild) {
+      parent.insertBefore(n.firstChild, n);
+    }
+    parent.removeChild(n);
+  });
+
+  return div.innerHTML;
+}
+
 // Safe markdown renderer with whitelist
 function renderMarkdown(text) {
   if (!text && text !== 0) return "";
@@ -385,111 +562,33 @@ function renderMarkdown(text) {
     return escapeHtml(textStr).replace(/\n/g, "<br>");
   }
 
-  // Configure marked with safe options
-  const renderer = new marked.Renderer();
-
-  // Whitelist of allowed HTML tags
-  const allowedTags = [
-    "p",
-    "br",
-    "strong",
-    "em",
-    "u",
-    "s",
-    "code",
-    "pre",
-    "h1",
-    "h2",
-    "h3",
-    "h4",
-    "h5",
-    "h6",
-    "ul",
-    "ol",
-    "li",
-    "blockquote",
-    "table",
-    "thead",
-    "tbody",
-    "tr",
-    "th",
-    "td",
-    "a",
-  ];
-
-  // Escape HTML except for whitelisted tags
-  function sanitizeHtml(html) {
-    const div = document.createElement("div");
-    div.innerHTML = html;
-
-    // Remove all non-whitelisted tags but keep their text content
-    const walker = document.createTreeWalker(
-      div,
-      NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT,
-      null
-    );
-
-    const nodesToRemove = [];
-    let node;
-
-    while ((node = walker.nextNode())) {
-      if (node.nodeType === Node.ELEMENT_NODE) {
-        if (!allowedTags.includes(node.tagName.toLowerCase())) {
-          nodesToRemove.push(node);
-        } else {
-          // Sanitize attributes - only allow href on <a> tags
-          if (node.tagName.toLowerCase() === "a") {
-            const href = node.getAttribute("href");
-            if (
-              href &&
-              (href.startsWith("http://") || href.startsWith("https://"))
-            ) {
-              node.setAttribute("target", "_blank");
-              node.setAttribute("rel", "noopener noreferrer");
-            } else {
-              node.removeAttribute("href");
-            }
-          }
-          // Remove all other attributes
-          Array.from(node.attributes).forEach(attr => {
-            if (
-              attr.name !== "href" &&
-              attr.name !== "target" &&
-              attr.name !== "rel"
-            ) {
-              node.removeAttribute(attr.name);
-            }
-          });
-        }
-      }
-    }
-
-    nodesToRemove.forEach(n => {
-      const parent = n.parentNode;
-      while (n.firstChild) {
-        parent.insertBefore(n.firstChild, n);
-      }
-      parent.removeChild(n);
-    });
-
-    return div.innerHTML;
-  }
-
-  // Custom code block renderer (Discord-style)
-  renderer.code = function (code, language) {
-    const escaped = escapeHtml(code);
-    const lang = language || "";
-    return `<div class="code-block"><pre><code class="language-${lang}">${escaped}</code></pre></div>`;
-  };
-
-  marked.setOptions({
-    breaks: true,
-    gfm: true,
-    renderer: renderer,
-  });
+  // Configure marked on first use
+  configureMarked();
 
   // Render markdown
-  let html = marked.parse(textStr);
+  let html;
+  try {
+    const result = marked.parse(textStr);
+    // Handle both sync and async returns, and ensure it's a string
+    if (typeof result === "string") {
+      html = result;
+    } else if (result && typeof result.then === "function") {
+      // If it returns a promise, fall back to simple rendering
+      console.warn(
+        "Marked returned a promise, falling back to simple rendering"
+      );
+      html = escapeHtml(textStr).replace(/\n/g, "<br>");
+    } else if (result && typeof result === "object") {
+      // If it's an object (shouldn't happen), try to stringify
+      console.warn("Marked returned an object:", result);
+      html = escapeHtml(textStr).replace(/\n/g, "<br>");
+    } else {
+      html = String(result || "");
+    }
+  } catch (parseError) {
+    console.warn("Marked parse error:", parseError);
+    html = escapeHtml(textStr).replace(/\n/g, "<br>");
+  }
 
   // Sanitize the HTML
   html = sanitizeHtml(html);
@@ -537,11 +636,39 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-function copyToClipboard(text) {
+function copyToClipboard(text, buttonElement = null) {
+  const showCopyFeedback = success => {
+    if (!buttonElement) return;
+
+    // Store original content
+    const originalContent = buttonElement.innerHTML;
+
+    // Show checkmark feedback
+    buttonElement.innerHTML = success ? "✓" : "✗";
+    buttonElement.classList.add("copy-success");
+
+    // Animate the button
+    buttonElement.style.transform = "scale(1.2)";
+
+    setTimeout(() => {
+      buttonElement.style.transform = "scale(1)";
+    }, 150);
+
+    // Restore original content after delay
+    setTimeout(() => {
+      buttonElement.innerHTML = originalContent;
+      buttonElement.classList.remove("copy-success");
+    }, 1000);
+  };
+
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text).catch(err => {
-      console.error("Failed to copy:", err);
-    });
+    navigator.clipboard
+      .writeText(text)
+      .then(() => showCopyFeedback(true))
+      .catch(err => {
+        console.error("Failed to copy:", err);
+        showCopyFeedback(false);
+      });
   } else {
     // Fallback for older browsers
     const textarea = document.createElement("textarea");
@@ -552,8 +679,10 @@ function copyToClipboard(text) {
     textarea.select();
     try {
       document.execCommand("copy");
+      showCopyFeedback(true);
     } catch (err) {
       console.error("Failed to copy:", err);
+      showCopyFeedback(false);
     }
     document.body.removeChild(textarea);
   }
@@ -648,12 +777,18 @@ function renderChatView() {
 
     const header = document.createElement("div");
     header.className = "chat-message-header";
-    header.textContent =
-      role === "user"
-        ? "User"
-        : role === "assistant"
-          ? "AI Assistant"
-          : "System";
+
+    // Get model name from the focused node for assistant messages
+    let headerText =
+      role === "user" ? "User" : role === "system" ? "System" : "AI Assistant";
+    if (
+      role === "assistant" &&
+      appState.focusedNode &&
+      appState.focusedNode.model
+    ) {
+      headerText = appState.focusedNode.model;
+    }
+    header.textContent = headerText;
 
     // Message actions (copy/edit buttons)
     const actions = document.createElement("div");
@@ -667,7 +802,7 @@ function renderChatView() {
     copyBtn.innerHTML = "📋";
     copyBtn.addEventListener("click", e => {
       e.stopPropagation();
-      copyToClipboard(messageContent);
+      copyToClipboard(messageContent, copyBtn);
     });
 
     const editBtn = document.createElement("button");
@@ -735,8 +870,8 @@ function renderChatView() {
     content.dataset.messageRole = role;
 
     messageDiv.appendChild(header);
-    messageDiv.appendChild(actions);
     messageDiv.appendChild(content);
+    messageDiv.appendChild(actions);
     DOM.chatMessages.appendChild(messageDiv);
   });
 
@@ -839,26 +974,59 @@ function saveEditedMessage(index, newContent) {
 
     const chatML = JSON.stringify({ messages }, null, 2);
 
-    appState.loomTree.updateNode(
-      node,
-      chatML,
-      node.summary || "Edited message"
-    );
+    // Check if we need to create a child node (if current node has children or is a gen/root node)
+    const needsChildNode =
+      node.children.length > 0 ||
+      ["gen", "rewrite", "root"].includes(node.type);
 
-    if (DOM.editor) {
-      DOM.editor.value = chatML;
-    }
+    if (needsChildNode) {
+      // Create a new child node with the edited content
+      const child = appState.loomTree.createNode(
+        "user",
+        node,
+        chatML,
+        "Edited message"
+      );
 
-    if (searchManager && node) {
-      try {
-        searchManager.updateNode(node, appState.loomTree.renderNode(node));
-      } catch (e) {
-        console.warn("Error updating search index:", e);
+      // Update search index for the new child
+      if (searchManager) {
+        try {
+          searchManager.addNodeToSearchIndex(
+            child,
+            appState.loomTree.renderNode(child)
+          );
+        } catch (e) {
+          console.warn("Error updating search index:", e);
+        }
       }
+
+      // Update focus to the new child node
+      editingMessageIndex = null;
+      updateFocus(child.id, "chat-edit");
+    } else {
+      // Update the existing node (only for fresh user nodes with no children)
+      appState.loomTree.updateNode(
+        node,
+        chatML,
+        node.summary || "Edited message"
+      );
+
+      if (DOM.editor) {
+        DOM.editor.value = chatML;
+      }
+
+      if (searchManager && node) {
+        try {
+          searchManager.updateNode(node, appState.loomTree.renderNode(node));
+        } catch (e) {
+          console.warn("Error updating search index:", e);
+        }
+      }
+
+      editingMessageIndex = null;
+      renderChatView();
     }
 
-    editingMessageIndex = null;
-    renderChatView();
     updateTreeStatsDisplay();
   } catch (error) {
     console.error("Error saving edited message:", error);
@@ -868,6 +1036,11 @@ function saveEditedMessage(index, newContent) {
 
 function saveAndResubmitMessage(index, newContent) {
   if (!appState || !appState.focusedNode) return;
+
+  // Validate settings before attempting to generate
+  if (!validateGenerationSettings()) {
+    return;
+  }
 
   try {
     const node = appState.focusedNode;
@@ -884,39 +1057,50 @@ function saveAndResubmitMessage(index, newContent) {
 
     const chatML = JSON.stringify({ messages }, null, 2);
 
-    appState.loomTree.updateNode(
-      node,
-      chatML,
-      node.summary || "Edited message"
-    );
-
-    if (DOM.editor) {
-      DOM.editor.value = chatML;
+    // Validate the ChatML
+    const validation = validateChatML(chatML);
+    if (!validation.valid) {
+      alert(`Invalid ChatML: ${validation.error}`);
+      return;
     }
 
-    if (searchManager && node) {
+    // Always create a child node for save and resubmit
+    const child = appState.loomTree.createNode(
+      "user",
+      node,
+      chatML,
+      "Edited and resubmitted"
+    );
+
+    // Update search index for the new child
+    if (searchManager) {
       try {
-        searchManager.updateNode(node, appState.loomTree.renderNode(node));
+        searchManager.addNodeToSearchIndex(
+          child,
+          appState.loomTree.renderNode(child)
+        );
       } catch (e) {
         console.warn("Error updating search index:", e);
       }
     }
 
     editingMessageIndex = null;
-    renderChatView();
+
+    // Update focus to the new child node
+    updateFocus(child.id, "chat-resubmit");
+
     updateTreeStatsDisplay();
 
-    // Generate new response (this will complete the assistant message)
-    if (llmService && node) {
-      const validation = validateChatML(DOM.editor ? DOM.editor.value : chatML);
-      if (!validation.valid) {
-        alert(`Invalid ChatML: ${validation.error}`);
-        return;
-      }
-      llmService.generateNewResponses(node.id);
+    // Show loading state
+    setChatGenerationLoading(true);
+
+    // Generate new response on the child node
+    if (llmService) {
+      llmService.generateNewResponses(child.id);
     }
   } catch (error) {
     console.error("Error saving and resubmitting message:", error);
+    setChatGenerationLoading(false);
     alert("Error saving message: " + (error.message || String(error)));
   }
 }
@@ -936,6 +1120,11 @@ function sendChatMessage() {
 
   if (!appState || !appState.focusedNode) {
     console.error("Cannot send message: appState or focusedNode is null");
+    return;
+  }
+
+  // Validate settings before sending
+  if (!validateGenerationSettings()) {
     return;
   }
 
@@ -1744,6 +1933,12 @@ async function init() {
         DOM.chatInput.style.height = "auto";
         DOM.chatInput.style.height =
           Math.min(DOM.chatInput.scrollHeight, 120) + "px";
+      });
+
+      // Enable context menu (right-click) for chat input
+      DOM.chatInput.addEventListener("contextmenu", e => {
+        e.preventDefault();
+        window.electronAPI.showContextMenu();
       });
     }
 

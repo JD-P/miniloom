@@ -505,9 +505,6 @@ select {
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
 }
 
 .chat-message.user .chat-message-header {
@@ -519,6 +516,8 @@ select {
   gap: 4px;
   opacity: 0;
   transition: opacity 0.2s;
+  margin-top: 8px;
+  justify-content: flex-end;
 }
 
 .chat-action-btn {
@@ -535,6 +534,14 @@ select {
 .chat-action-btn:hover {
   opacity: 1;
   background-color: rgba(0, 0, 0, 0.05);
+}
+
+.chat-action-btn.copy-success {
+  color: #28a745;
+  opacity: 1;
+  transition:
+    transform 0.15s ease,
+    color 0.2s ease;
 }
 
 .chat-message-content {
@@ -1672,6 +1679,25 @@ table.keys td:nth-child(2) {
 
 .control-group select:hover {
   border-color: var(--border-hover);
+}
+
+/* Warning flash animation for settings validation */
+.control-group select.warning-flash {
+  animation: warningFlash 0.5s ease-in-out 3;
+  border-color: #ffc107 !important;
+  box-shadow: 0 0 8px rgba(255, 193, 7, 0.6) !important;
+}
+
+@keyframes warningFlash {
+  0%,
+  100% {
+    background-color: white;
+    border-color: #ffc107;
+  }
+  50% {
+    background-color: #fff3cd;
+    border-color: #ffc107;
+  }
 }
 
 .generate-button-container {
