@@ -410,12 +410,19 @@ function parseChatML(text) {
 function getMessageContent(msg) {
   if (!msg) return "";
 
+  // Handle reasoning/answer structure (OpenRouter format) with distinct rendering
+  if (msg.reasoning && (msg.answer || msg.content)) {
+    const reasoning = String(msg.reasoning);
+    const answer = msg.answer
+      ? String(msg.answer)
+      : msg.content
+        ? String(msg.content)
+        : "";
+    // Return structured format that will be rendered specially
+    return { type: "reasoning", reasoning, answer };
+  }
   if (msg.content) {
     return String(msg.content);
-  }
-  // Handle reasoning/answer structure (OpenRouter format)
-  if (msg.reasoning && msg.answer) {
-    return `**Reasoning:**\n${String(msg.reasoning)}\n\n**Answer:**\n${String(msg.answer)}`;
   }
   if (msg.answer) {
     return String(msg.answer);
@@ -424,6 +431,28 @@ function getMessageContent(msg) {
     return String(msg.reasoning);
   }
   return "";
+}
+
+// Render message content, handling reasoning blocks specially
+function renderMessageContent(contentOrObj) {
+  if (!contentOrObj) return "";
+
+  // Handle reasoning/answer structure
+  if (typeof contentOrObj === "object" && contentOrObj.type === "reasoning") {
+    const reasoningHtml = renderMarkdown(contentOrObj.reasoning);
+    const answerHtml = renderMarkdown(contentOrObj.answer);
+
+    return `
+      <details class="reasoning-block" open>
+        <summary class="reasoning-summary">💭 Reasoning</summary>
+        <div class="reasoning-content">${reasoningHtml}</div>
+      </details>
+      <div class="answer-content">${answerHtml}</div>
+    `;
+  }
+
+  // Regular string content
+  return renderMarkdown(String(contentOrObj));
 }
 
 // Configure marked once at startup
@@ -612,21 +641,42 @@ function renderMarkdown(text) {
     return `<div class="math-display">\\[${escapeHtml(formula)}\\]</div>`;
   });
 
-  // Render MathJax after a short delay
-  setTimeout(() => {
+  return html;
+}
+
+// Queue MathJax typesetting with debouncing to avoid conflicts
+let mathJaxQueue = [];
+let mathJaxTimeout = null;
+
+function queueMathJaxTypesetting() {
+  if (mathJaxTimeout) {
+    clearTimeout(mathJaxTimeout);
+  }
+
+  mathJaxTimeout = setTimeout(() => {
     if (window.MathJax && window.MathJax.typesetPromise) {
+      // Find all math elements that are currently in the DOM
       const mathElements = document.querySelectorAll(
-        ".math-inline, .math-display"
+        ".chat-message-content .math-inline, .chat-message-content .math-display"
       );
+
       if (mathElements.length > 0) {
-        window.MathJax.typesetPromise(mathElements).catch(err => {
-          console.warn("MathJax rendering error:", err);
-        });
+        // Filter to only elements that are still in the document
+        const validElements = Array.from(mathElements).filter(el =>
+          document.body.contains(el)
+        );
+
+        if (validElements.length > 0) {
+          window.MathJax.typesetPromise(validElements).catch(err => {
+            // Only log if it's not a replaceChild error (which happens during re-renders)
+            if (!err.message || !err.message.includes("replaceChild")) {
+              console.warn("MathJax rendering error:", err);
+            }
+          });
+        }
       }
     }
-  }, 100);
-
-  return html;
+  }, 200);
 }
 
 function escapeHtml(text) {
@@ -781,12 +831,13 @@ function renderChatView() {
     // Get model name from the focused node for assistant messages
     let headerText =
       role === "user" ? "User" : role === "system" ? "System" : "AI Assistant";
-    if (
-      role === "assistant" &&
-      appState.focusedNode &&
-      appState.focusedNode.model
-    ) {
-      headerText = appState.focusedNode.model;
+    if (role === "assistant") {
+      // Check if the message itself has a model specified (for future per-message tracking)
+      const messageModel =
+        msg.model || (appState.focusedNode && appState.focusedNode.model);
+      if (messageModel) {
+        headerText = `AI Assistant (${messageModel})`;
+      }
     }
     header.textContent = headerText;
 
@@ -797,13 +848,19 @@ function renderChatView() {
     const messageContent = getMessageContent(msg) || "";
     const isLastMessage = index === messages.length - 1;
 
+    // Get plain text version for copying
+    const copyText =
+      typeof messageContent === "object" && messageContent.type === "reasoning"
+        ? `Reasoning:\n${messageContent.reasoning}\n\nAnswer:\n${messageContent.answer}`
+        : String(messageContent);
+
     const copyBtn = document.createElement("button");
     copyBtn.className = "chat-action-btn copy-btn";
     copyBtn.title = "Copy message";
     copyBtn.innerHTML = "📋";
     copyBtn.addEventListener("click", e => {
       e.stopPropagation();
-      copyToClipboard(messageContent, copyBtn);
+      copyToClipboard(copyText, copyBtn);
     });
 
     const editBtn = document.createElement("button");
@@ -816,6 +873,42 @@ function renderChatView() {
     });
 
     actions.appendChild(copyBtn);
+
+    // Add thumbs up/down buttons only on the last message (syncs with main app rating)
+    if (isLastMessage && !chatGenerationInProgress) {
+      const thumbUpBtn = document.createElement("button");
+      thumbUpBtn.className = "chat-action-btn thumb-btn";
+      thumbUpBtn.title = "Rate this branch positively";
+      thumbUpBtn.innerHTML =
+        appState.focusedNode && appState.focusedNode.rating === true
+          ? "👍"
+          : "👍";
+      if (appState.focusedNode && appState.focusedNode.rating === true) {
+        thumbUpBtn.classList.add("active", "thumb-up-active");
+      }
+      thumbUpBtn.addEventListener("click", e => {
+        e.stopPropagation();
+        handleThumbRating(true);
+        renderChatView(); // Re-render to update button state
+      });
+
+      const thumbDownBtn = document.createElement("button");
+      thumbDownBtn.className = "chat-action-btn thumb-btn";
+      thumbDownBtn.title = "Rate this branch negatively";
+      thumbDownBtn.innerHTML = "👎";
+      if (appState.focusedNode && appState.focusedNode.rating === false) {
+        thumbDownBtn.classList.add("active", "thumb-down-active");
+      }
+      thumbDownBtn.addEventListener("click", e => {
+        e.stopPropagation();
+        handleThumbRating(false);
+        renderChatView(); // Re-render to update button state
+      });
+
+      actions.appendChild(thumbUpBtn);
+      actions.appendChild(thumbDownBtn);
+    }
+
     actions.appendChild(editBtn);
 
     // Add reroll button only on the last message
@@ -835,10 +928,16 @@ function renderChatView() {
     content.className = "chat-message-content";
 
     if (editingMessageIndex === index) {
-      // Show edit mode
+      // Show edit mode - use plain text version for editing
+      const editText =
+        typeof messageContent === "object" &&
+        messageContent.type === "reasoning"
+          ? messageContent.answer // Edit just the answer, not the reasoning
+          : String(messageContent);
+
       const editTextarea = document.createElement("textarea");
       editTextarea.className = "chat-message-edit-input";
-      editTextarea.value = messageContent;
+      editTextarea.value = editText;
       editTextarea.rows = Math.min(editTextarea.value.split("\n").length, 10);
 
       const editActions = document.createElement("div");
@@ -875,8 +974,8 @@ function renderChatView() {
       content.appendChild(editTextarea);
       content.appendChild(editActions);
     } else {
-      // Show rendered markdown
-      content.innerHTML = renderMarkdown(messageContent);
+      // Show rendered markdown (with special handling for reasoning blocks)
+      content.innerHTML = renderMessageContent(messageContent);
     }
 
     content.dataset.messageIndex = index;
@@ -923,6 +1022,9 @@ function renderChatView() {
       });
     }
   }, 100);
+
+  // Queue MathJax typesetting
+  queueMathJaxTypesetting();
 }
 
 function setChatGenerationLoading(isLoading) {
@@ -969,7 +1071,7 @@ function cancelEditing() {
   renderChatView();
 }
 
-function saveEditedMessage(index, newContent) {
+async function saveEditedMessage(index, newContent) {
   if (!appState || !appState.focusedNode) return;
 
   try {
@@ -993,13 +1095,18 @@ function saveEditedMessage(index, newContent) {
       ["gen", "rewrite", "root"].includes(node.type);
 
     if (needsChildNode) {
-      // Create a new child node with the edited content
+      // Create a new child node with the edited content - use temporary summary
       const child = appState.loomTree.createNode(
         "user",
         node,
         chatML,
-        "Edited message"
+        "Editing..."
       );
+
+      // Preserve model info from parent if available
+      if (node.model) {
+        child.model = node.model;
+      }
 
       // Update search index for the new child
       if (searchManager) {
@@ -1016,13 +1123,12 @@ function saveEditedMessage(index, newContent) {
       // Update focus to the new child node
       editingMessageIndex = null;
       updateFocus(child.id, "chat-edit");
+
+      // Generate proper summary async
+      generateSummaryForNode(child, newContent);
     } else {
       // Update the existing node (only for fresh user nodes with no children)
-      appState.loomTree.updateNode(
-        node,
-        chatML,
-        node.summary || "Edited message"
-      );
+      appState.loomTree.updateNode(node, chatML, node.summary || "Editing...");
 
       if (DOM.editor) {
         DOM.editor.value = chatML;
@@ -1038,12 +1144,47 @@ function saveEditedMessage(index, newContent) {
 
       editingMessageIndex = null;
       renderChatView();
+
+      // Generate proper summary async
+      generateSummaryForNode(node, newContent);
     }
 
     updateTreeStatsDisplay();
   } catch (error) {
     console.error("Error saving edited message:", error);
     alert("Error saving message: " + (error.message || String(error)));
+  }
+}
+
+// Generate summary for a node asynchronously
+async function generateSummaryForNode(node, content) {
+  if (!llmService || !node) return;
+
+  try {
+    const summary = await llmService.generateSummary(
+      content || node.cachedRenderText
+    );
+    if (summary && summary !== "Branch Error") {
+      // Update the node's summary
+      node.summary = summary;
+
+      // Update the tree view to reflect the new summary
+      if (treeNav) {
+        treeNav.updateTreeView();
+      }
+
+      // Update search index
+      if (searchManager) {
+        try {
+          searchManager.updateNode(node, appState.loomTree.renderNode(node));
+        } catch (e) {
+          console.warn("Error updating search index after summary:", e);
+        }
+      }
+    }
+  } catch (error) {
+    console.warn("Failed to generate summary for node:", error);
+    // Keep the temporary summary if generation fails
   }
 }
 
@@ -1077,13 +1218,18 @@ function saveAndResubmitMessage(index, newContent) {
       return;
     }
 
-    // Always create a child node for save and resubmit
+    // Always create a child node for save and resubmit - use temporary summary
     const child = appState.loomTree.createNode(
       "user",
       node,
       chatML,
-      "Edited and resubmitted"
+      "Resubmitting..."
     );
+
+    // Preserve model info from parent if available
+    if (node.model) {
+      child.model = node.model;
+    }
 
     // Update search index for the new child
     if (searchManager) {
@@ -1106,6 +1252,9 @@ function saveAndResubmitMessage(index, newContent) {
 
     // Show loading state
     setChatGenerationLoading(true);
+
+    // Generate summary async (in background)
+    generateSummaryForNode(child, newContent);
 
     // Generate new response on the child node
     if (llmService) {
@@ -1231,6 +1380,11 @@ function sendChatMessage() {
         chatML,
         "New message"
       );
+
+      // Preserve model info from parent if available
+      if (node.model) {
+        child.model = node.model;
+      }
 
       // Update search index for the new child
       if (searchManager) {

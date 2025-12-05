@@ -544,14 +544,35 @@ select {
     color 0.2s ease;
 }
 
-.chat-action-btn.reroll-btn {
-  background-color: rgba(213, 4, 2, 0.1);
-  border-radius: 4px;
+.chat-action-btn.reroll-btn:hover {
+  opacity: 1;
+  background-color: rgba(0, 0, 0, 0.05);
 }
 
-.chat-action-btn.reroll-btn:hover {
-  background-color: rgba(213, 4, 2, 0.2);
+.chat-action-btn.thumb-btn {
+  transition: all 0.2s ease;
+}
+
+.chat-action-btn.thumb-btn.active {
   opacity: 1;
+}
+
+.chat-action-btn.thumb-btn.thumb-up-active {
+  color: #28a745;
+  background-color: rgba(40, 167, 69, 0.15);
+}
+
+.chat-action-btn.thumb-btn.thumb-up-active:hover {
+  background-color: rgba(40, 167, 69, 0.25);
+}
+
+.chat-action-btn.thumb-btn.thumb-down-active {
+  color: #dc3545;
+  background-color: rgba(220, 53, 69, 0.15);
+}
+
+.chat-action-btn.thumb-btn.thumb-down-active:hover {
+  background-color: rgba(220, 53, 69, 0.25);
 }
 
 .chat-message-content {
@@ -669,6 +690,63 @@ select {
 .chat-message-content .math-inline,
 .chat-message-content .math-display {
   margin: 8px 0;
+}
+
+/* Reasoning block styling */
+.chat-message-content .reasoning-block {
+  margin: 0 0 16px 0;
+  padding: 0;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  background-color: rgba(0, 0, 0, 0.02);
+  overflow: hidden;
+}
+
+.chat-message-content .reasoning-summary {
+  cursor: pointer;
+  padding: 10px 14px;
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--text-secondary);
+  background-color: rgba(0, 0, 0, 0.03);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chat-message-content .reasoning-summary:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.chat-message-content .reasoning-block[open] .reasoning-summary {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.chat-message-content .reasoning-block:not([open]) .reasoning-summary {
+  border-bottom: none;
+}
+
+.chat-message-content .reasoning-content {
+  padding: 12px 14px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.chat-message-content .reasoning-content p {
+  margin: 0 0 8px 0;
+}
+
+.chat-message-content .reasoning-content p:last-child {
+  margin-bottom: 0;
+}
+
+.chat-message-content .answer-content {
+  margin-top: 0;
 }
 
 .chat-message-edit-input {
