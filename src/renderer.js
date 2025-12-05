@@ -106,12 +106,16 @@ function updateFocus(nodeId, reason = "unknown") {
 // Chat view state
 let chatViewMode = "text"; // "text" or "chat"
 let editingMessageIndex = null; // Index of message being edited, or null
+let chatGenerationInProgress = false; // Track if generation is in progress
 
 function isChatCompletionMethod() {
   if (!llmService) return false;
   try {
     const params = llmService.prepareGenerationParams();
-    return params.samplingMethod === "openai-chat" || params.samplingMethod === "openrouter-chat";
+    return (
+      params.samplingMethod === "openai-chat" ||
+      params.samplingMethod === "openrouter-chat"
+    );
   } catch (error) {
     return false;
   }
@@ -120,15 +124,18 @@ function isChatCompletionMethod() {
 function updateChatToggleVisibility() {
   const isChatMethod = isChatCompletionMethod();
   if (DOM.chatToggleContainer) {
-    const wasVisible = DOM.chatToggleContainer.style.display !== "none" && 
-                       DOM.chatToggleContainer.style.display !== "";
+    const wasVisible =
+      DOM.chatToggleContainer.style.display !== "none" &&
+      DOM.chatToggleContainer.style.display !== "";
     DOM.chatToggleContainer.style.display = isChatMethod ? "flex" : "none";
-    
+
     // Initialize toggle buttons if they exist
     if (isChatMethod && DOM.chatToggle) {
       const toggleOptions = DOM.chatToggle.querySelectorAll(".toggle-option");
-      const activeOption = DOM.chatToggle.querySelector(".toggle-option.active");
-      
+      const activeOption = DOM.chatToggle.querySelector(
+        ".toggle-option.active"
+      );
+
       // If no active option, default to chat mode
       if (!activeOption || toggleOptions.length === 0) {
         chatViewMode = "chat";
@@ -143,7 +150,7 @@ function updateChatToggleVisibility() {
         chatViewMode = activeOption.dataset.mode || "chat";
       }
     }
-    
+
     // If toggle just became visible, ensure view mode matches and render
     if (isChatMethod && !wasVisible) {
       // Default to chat mode if toggle just appeared
@@ -163,15 +170,15 @@ function updateChatToggleVisibility() {
       }, 50);
     }
   }
-  
+
   if (!isChatMethod && chatViewMode === "chat") {
     chatViewMode = "text";
     updateViewMode();
   }
-  
+
   // Update generate button visibility
   updateGenerateButtonVisibility();
-  
+
   // If we're in chat mode and chat method is available, ensure view is rendered
   if (isChatMethod && chatViewMode === "chat") {
     // Ensure chat view is rendered
@@ -212,12 +219,14 @@ function updateGenerateButtonVisibility() {
 function updateViewMode() {
   // Cancel any ongoing editing when switching modes
   editingMessageIndex = null;
-  
+
   if (!DOM.editor || !DOM.chatView) {
-    console.warn("Cannot update view mode: editor or chatView elements not found");
+    console.warn(
+      "Cannot update view mode: editor or chatView elements not found"
+    );
     return;
   }
-  
+
   if (chatViewMode === "chat") {
     DOM.editor.style.display = "none";
     DOM.chatView.style.display = "flex";
@@ -232,7 +241,7 @@ function updateViewMode() {
     DOM.editor.style.display = "block";
     DOM.chatView.style.display = "none";
   }
-  
+
   // Update generate button visibility
   updateGenerateButtonVisibility();
 }
@@ -245,10 +254,16 @@ function validateChatML(text) {
     }
     for (const msg of data.messages) {
       if (!msg.role || !msg.content) {
-        return { valid: false, error: "Each message must have 'role' and 'content' fields" };
+        return {
+          valid: false,
+          error: "Each message must have 'role' and 'content' fields",
+        };
       }
       if (!["user", "assistant", "system"].includes(msg.role)) {
-        return { valid: false, error: `Invalid role: ${msg.role}. Must be 'user', 'assistant', or 'system'` };
+        return {
+          valid: false,
+          error: `Invalid role: ${msg.role}. Must be 'user', 'assistant', or 'system'`,
+        };
       }
     }
     return { valid: true };
@@ -262,7 +277,7 @@ function parseChatML(text) {
   if (text == null || text === undefined) {
     return [];
   }
-  
+
   // Convert to string safely
   let textStr = "";
   try {
@@ -276,12 +291,17 @@ function parseChatML(text) {
   } catch (e) {
     return [];
   }
-  
+
   // Ensure textStr is a valid string
-  if (!textStr || typeof textStr !== "string" || textStr === "null" || textStr === "undefined") {
+  if (
+    !textStr ||
+    typeof textStr !== "string" ||
+    textStr === "null" ||
+    textStr === "undefined"
+  ) {
     return [];
   }
-  
+
   // Safely trim the string - handle null/undefined before calling trim
   let trimmedText = "";
   try {
@@ -299,21 +319,25 @@ function parseChatML(text) {
       trimmedText = textStr || "";
     }
   }
-  
+
   // If empty after trimming, return empty array
   if (!trimmedText || trimmedText.length === 0) {
     return [];
   }
-  
+
   try {
     const data = JSON.parse(trimmedText);
     if (data && data.messages && Array.isArray(data.messages)) {
       // Validate messages array - filter out invalid messages
       return data.messages.filter(msg => {
-        return msg && 
-               typeof msg === "object" && 
-               msg.role && 
-               (msg.content !== undefined || msg.reasoning !== undefined || msg.answer !== undefined);
+        return (
+          msg &&
+          typeof msg === "object" &&
+          msg.role &&
+          (msg.content !== undefined ||
+            msg.reasoning !== undefined ||
+            msg.answer !== undefined)
+        );
       });
     }
     // Fallback: treat as single user message if it's not valid JSON
@@ -333,7 +357,7 @@ function parseChatML(text) {
 // Extract content from message, handling reasoning/answer fields
 function getMessageContent(msg) {
   if (!msg) return "";
-  
+
   if (msg.content) {
     return String(msg.content);
   }
@@ -353,66 +377,93 @@ function getMessageContent(msg) {
 // Safe markdown renderer with whitelist
 function renderMarkdown(text) {
   if (!text && text !== 0) return "";
-  
+
   const textStr = String(text || "");
-  
+
   if (!window.marked) {
     // Fallback if marked isn't loaded
     return escapeHtml(textStr).replace(/\n/g, "<br>");
   }
-  
+
   // Configure marked with safe options
   const renderer = new marked.Renderer();
-  
+
   // Whitelist of allowed HTML tags
   const allowedTags = [
-    'p', 'br', 'strong', 'em', 'u', 's', 'code', 'pre',
-    'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-    'ul', 'ol', 'li', 'blockquote',
-    'table', 'thead', 'tbody', 'tr', 'th', 'td',
-    'a'
+    "p",
+    "br",
+    "strong",
+    "em",
+    "u",
+    "s",
+    "code",
+    "pre",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "ul",
+    "ol",
+    "li",
+    "blockquote",
+    "table",
+    "thead",
+    "tbody",
+    "tr",
+    "th",
+    "td",
+    "a",
   ];
-  
+
   // Escape HTML except for whitelisted tags
   function sanitizeHtml(html) {
-    const div = document.createElement('div');
+    const div = document.createElement("div");
     div.innerHTML = html;
-    
+
     // Remove all non-whitelisted tags but keep their text content
     const walker = document.createTreeWalker(
       div,
       NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT,
       null
     );
-    
+
     const nodesToRemove = [];
     let node;
-    
-    while (node = walker.nextNode()) {
+
+    while ((node = walker.nextNode())) {
       if (node.nodeType === Node.ELEMENT_NODE) {
         if (!allowedTags.includes(node.tagName.toLowerCase())) {
           nodesToRemove.push(node);
         } else {
           // Sanitize attributes - only allow href on <a> tags
-          if (node.tagName.toLowerCase() === 'a') {
-            const href = node.getAttribute('href');
-            if (href && (href.startsWith('http://') || href.startsWith('https://'))) {
-              node.setAttribute('target', '_blank');
-              node.setAttribute('rel', 'noopener noreferrer');
+          if (node.tagName.toLowerCase() === "a") {
+            const href = node.getAttribute("href");
+            if (
+              href &&
+              (href.startsWith("http://") || href.startsWith("https://"))
+            ) {
+              node.setAttribute("target", "_blank");
+              node.setAttribute("rel", "noopener noreferrer");
             } else {
-              node.removeAttribute('href');
+              node.removeAttribute("href");
             }
           }
           // Remove all other attributes
           Array.from(node.attributes).forEach(attr => {
-            if (attr.name !== 'href' && attr.name !== 'target' && attr.name !== 'rel') {
+            if (
+              attr.name !== "href" &&
+              attr.name !== "target" &&
+              attr.name !== "rel"
+            ) {
               node.removeAttribute(attr.name);
             }
           });
         }
       }
     }
-    
+
     nodesToRemove.forEach(n => {
       const parent = n.parentNode;
       while (n.firstChild) {
@@ -420,40 +471,40 @@ function renderMarkdown(text) {
       }
       parent.removeChild(n);
     });
-    
+
     return div.innerHTML;
   }
-  
+
   // Custom code block renderer (Discord-style)
-  renderer.code = function(code, language) {
+  renderer.code = function (code, language) {
     const escaped = escapeHtml(code);
-    const lang = language || '';
+    const lang = language || "";
     return `<div class="code-block"><pre><code class="language-${lang}">${escaped}</code></pre></div>`;
   };
-  
+
   marked.setOptions({
     breaks: true,
     gfm: true,
-    renderer: renderer
+    renderer: renderer,
   });
-  
+
   // Render markdown
   let html = marked.parse(textStr);
-  
+
   // Sanitize the HTML
   html = sanitizeHtml(html);
-  
+
   // Process LaTeX math expressions
   // First handle display math: $$...$$
   html = html.replace(/\$\$([^$]+?)\$\$/g, (match, formula) => {
     return `<div class="math-display">\\[${escapeHtml(formula)}\\]</div>`;
   });
-  
+
   // Then handle inline math: $...$ (but not $$ which we already processed)
   html = html.replace(/\$([^$\n]+?)\$/g, (match, formula) => {
     return `<span class="math-inline">\\(${escapeHtml(formula)}\\)</span>`;
   });
-  
+
   // Also handle \(...\) and \[...\] if not already processed
   html = html.replace(/\\\(([^)]+?)\\\)/g, (match, formula) => {
     return `<span class="math-inline">\\(${escapeHtml(formula)}\\)</span>`;
@@ -461,25 +512,27 @@ function renderMarkdown(text) {
   html = html.replace(/\\\[([^\]]+?)\\\]/g, (match, formula) => {
     return `<div class="math-display">\\[${escapeHtml(formula)}\\]</div>`;
   });
-  
+
   // Render MathJax after a short delay
   setTimeout(() => {
     if (window.MathJax && window.MathJax.typesetPromise) {
-      const mathElements = document.querySelectorAll('.math-inline, .math-display');
+      const mathElements = document.querySelectorAll(
+        ".math-inline, .math-display"
+      );
       if (mathElements.length > 0) {
-        window.MathJax.typesetPromise(mathElements).catch((err) => {
-          console.warn('MathJax rendering error:', err);
+        window.MathJax.typesetPromise(mathElements).catch(err => {
+          console.warn("MathJax rendering error:", err);
         });
       }
     }
   }, 100);
-  
+
   return html;
 }
 
 function escapeHtml(text) {
   if (text == null) return "";
-  const div = document.createElement('div');
+  const div = document.createElement("div");
   div.textContent = String(text);
   return div.innerHTML;
 }
@@ -487,20 +540,20 @@ function escapeHtml(text) {
 function copyToClipboard(text) {
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).catch(err => {
-      console.error('Failed to copy:', err);
+      console.error("Failed to copy:", err);
     });
   } else {
     // Fallback for older browsers
-    const textarea = document.createElement('textarea');
+    const textarea = document.createElement("textarea");
     textarea.value = text;
-    textarea.style.position = 'fixed';
-    textarea.style.opacity = '0';
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
     document.body.appendChild(textarea);
     textarea.select();
     try {
-      document.execCommand('copy');
+      document.execCommand("copy");
     } catch (err) {
-      console.error('Failed to copy:', err);
+      console.error("Failed to copy:", err);
     }
     document.body.removeChild(textarea);
   }
@@ -510,7 +563,8 @@ function renderChatView() {
   if (!appState || !appState.focusedNode) {
     console.warn("Cannot render chat view: appState or focusedNode is null");
     if (DOM.chatMessages) {
-      DOM.chatMessages.innerHTML = '<div class="chat-empty-state">No messages yet. Start a conversation!</div>';
+      DOM.chatMessages.innerHTML =
+        '<div class="chat-empty-state">No messages yet. Start a conversation!</div>';
     }
     return;
   }
@@ -518,11 +572,15 @@ function renderChatView() {
     console.warn("Cannot render chat view: chatMessages element not found");
     return;
   }
-  
+
   let text = "";
   try {
     const node = appState.focusedNode;
-    if (node && node.cachedRenderText != null && node.cachedRenderText !== undefined) {
+    if (
+      node &&
+      node.cachedRenderText != null &&
+      node.cachedRenderText !== undefined
+    ) {
       const renderText = node.cachedRenderText;
       if (typeof renderText === "string") {
         text = renderText;
@@ -538,7 +596,7 @@ function renderChatView() {
     console.warn("Error getting cachedRenderText:", e);
     text = "";
   }
-  
+
   // Ensure text is a valid string before parsing
   if (text == null || text === undefined) {
     text = "";
@@ -546,7 +604,7 @@ function renderChatView() {
   if (typeof text !== "string") {
     text = String(text || "");
   }
-  
+
   let messages = [];
   try {
     messages = parseChatML(text);
@@ -558,87 +616,94 @@ function renderChatView() {
     console.error("Error parsing ChatML:", e);
     messages = [];
   }
-  
+
   // Show empty state if no messages
   if (!Array.isArray(messages) || messages.length === 0) {
     if (DOM.chatMessages) {
-      DOM.chatMessages.innerHTML = '<div class="chat-empty-state">No messages yet. Start a conversation!</div>';
+      DOM.chatMessages.innerHTML =
+        '<div class="chat-empty-state">No messages yet. Start a conversation!</div>';
     }
     return;
   }
-  
+
   // Clear any existing content
   DOM.chatMessages.innerHTML = "";
-  
+
   messages.forEach((msg, index) => {
     if (!msg || typeof msg !== "object") {
       console.warn("Invalid message at index", index, msg);
       return;
     }
-    
+
     // Ensure msg.role is valid
     const role = msg.role || "user";
     if (!["user", "assistant", "system"].includes(role)) {
       console.warn("Invalid role in message at index", index, role);
       return;
     }
-    
+
     const messageDiv = document.createElement("div");
     messageDiv.className = `chat-message ${role}`;
     messageDiv.dataset.messageIndex = index;
-    
+
     const header = document.createElement("div");
     header.className = "chat-message-header";
-    header.textContent = role === "user" ? "User" : role === "assistant" ? "AI Assistant" : "System";
-    
+    header.textContent =
+      role === "user"
+        ? "User"
+        : role === "assistant"
+          ? "AI Assistant"
+          : "System";
+
     // Message actions (copy/edit buttons)
     const actions = document.createElement("div");
     actions.className = "chat-message-actions";
-    
+
     const messageContent = getMessageContent(msg) || "";
-    
+
     const copyBtn = document.createElement("button");
     copyBtn.className = "chat-action-btn copy-btn";
     copyBtn.title = "Copy message";
     copyBtn.innerHTML = "📋";
-    copyBtn.addEventListener("click", (e) => {
+    copyBtn.addEventListener("click", e => {
       e.stopPropagation();
       copyToClipboard(messageContent);
     });
-    
+
     const editBtn = document.createElement("button");
     editBtn.className = "chat-action-btn edit-btn";
     editBtn.title = "Edit message";
     editBtn.innerHTML = "✏️";
-    editBtn.addEventListener("click", (e) => {
+    editBtn.addEventListener("click", e => {
       e.stopPropagation();
       startEditingMessage(index, msg);
     });
-    
+
     actions.appendChild(copyBtn);
     actions.appendChild(editBtn);
-    
+
     const content = document.createElement("div");
     content.className = "chat-message-content";
-    
+
     if (editingMessageIndex === index) {
       // Show edit mode
       const editTextarea = document.createElement("textarea");
       editTextarea.className = "chat-message-edit-input";
       editTextarea.value = messageContent;
-      editTextarea.rows = Math.min(editTextarea.value.split('\n').length, 10);
-      
+      editTextarea.rows = Math.min(editTextarea.value.split("\n").length, 10);
+
       const editActions = document.createElement("div");
       editActions.className = "chat-edit-actions";
-      
+
       const saveBtn = document.createElement("button");
       saveBtn.className = "chat-edit-btn save-btn";
       saveBtn.textContent = "Save";
       saveBtn.addEventListener("click", () => {
         saveEditedMessage(index, editTextarea.value);
       });
-      
-      const isLastAssistant = role === "assistant" && index === messages.length - 1;
+
+      const isLastAssistant =
+        role === "assistant" && index === messages.length - 1;
       if (isLastAssistant) {
         const saveResubmitBtn = document.createElement("button");
         saveResubmitBtn.className = "chat-edit-btn save-resubmit-btn";
@@ -648,44 +713,60 @@ function renderChatView() {
         });
         editActions.appendChild(saveResubmitBtn);
       }
-      
+
       const cancelBtn = document.createElement("button");
       cancelBtn.className = "chat-edit-btn cancel-btn";
       cancelBtn.textContent = "Cancel";
       cancelBtn.addEventListener("click", () => {
         cancelEditing();
       });
-      
+
       editActions.appendChild(saveBtn);
       editActions.appendChild(cancelBtn);
-      
+
       content.appendChild(editTextarea);
       content.appendChild(editActions);
     } else {
       // Show rendered markdown
       content.innerHTML = renderMarkdown(messageContent);
     }
-    
+
     content.dataset.messageIndex = index;
     content.dataset.messageRole = role;
-    
+
     messageDiv.appendChild(header);
     messageDiv.appendChild(actions);
     messageDiv.appendChild(content);
     DOM.chatMessages.appendChild(messageDiv);
   });
-  
+
+  // Add loading indicator if generation is in progress
+  if (chatGenerationInProgress) {
+    const loadingDiv = document.createElement("div");
+    loadingDiv.className = "chat-loading-indicator";
+    loadingDiv.id = "chat-loading-indicator";
+    loadingDiv.innerHTML = `
+      <span>AI is thinking</span>
+      <span class="loading-dots">
+        <span class="loading-dot"></span>
+        <span class="loading-dot"></span>
+        <span class="loading-dot"></span>
+      </span>
+    `;
+    DOM.chatMessages.appendChild(loadingDiv);
+  }
+
   // Scroll to bottom
   setTimeout(() => {
     if (DOM.chatMessages) {
       DOM.chatMessages.scrollTop = DOM.chatMessages.scrollHeight;
     }
   }, 0);
-  
+
   // Highlight code blocks
   setTimeout(() => {
     if (window.hljs && DOM.chatMessages) {
-      DOM.chatMessages.querySelectorAll('pre code').forEach((block) => {
+      DOM.chatMessages.querySelectorAll("pre code").forEach(block => {
         try {
           hljs.highlightElement(block);
         } catch (e) {
@@ -694,6 +775,40 @@ function renderChatView() {
       });
     }
   }, 100);
+}
+
+function setChatGenerationLoading(isLoading) {
+  chatGenerationInProgress = isLoading;
+
+  // Update send button state
+  if (DOM.chatSendButton) {
+    if (isLoading) {
+      DOM.chatSendButton.classList.add("loading");
+      DOM.chatSendButton.disabled = true;
+    } else {
+      DOM.chatSendButton.classList.remove("loading");
+      DOM.chatSendButton.disabled = false;
+    }
+  }
+
+  // Update chat input state
+  if (DOM.chatInput) {
+    DOM.chatInput.disabled = isLoading;
+    if (isLoading) {
+      DOM.chatInput.placeholder = "Generating response...";
+    } else {
+      DOM.chatInput.placeholder = "Type your message...";
+    }
+  }
+
+  // If we're in chat mode, re-render to show/hide the loading indicator
+  if (
+    chatViewMode === "chat" &&
+    DOM.chatView &&
+    DOM.chatView.style.display !== "none"
+  ) {
+    renderChatView();
+  }
 }
 
 function startEditingMessage(index, msg) {
@@ -708,32 +823,32 @@ function cancelEditing() {
 
 function saveEditedMessage(index, newContent) {
   if (!appState || !appState.focusedNode) return;
-  
+
   try {
     const node = appState.focusedNode;
     let text = "";
     if (node && node.cachedRenderText != null) {
       text = String(node.cachedRenderText || "");
     }
-    
+
     const messages = parseChatML(text);
-    
+
     if (messages[index]) {
       messages[index].content = String(newContent || "").trim();
     }
-    
+
     const chatML = JSON.stringify({ messages }, null, 2);
-    
+
     appState.loomTree.updateNode(
       node,
       chatML,
       node.summary || "Edited message"
     );
-    
+
     if (DOM.editor) {
       DOM.editor.value = chatML;
     }
-    
+
     if (searchManager && node) {
       try {
         searchManager.updateNode(node, appState.loomTree.renderNode(node));
@@ -741,7 +856,7 @@ function saveEditedMessage(index, newContent) {
         console.warn("Error updating search index:", e);
       }
     }
-    
+
     editingMessageIndex = null;
     renderChatView();
     updateTreeStatsDisplay();
@@ -753,32 +868,32 @@ function saveEditedMessage(index, newContent) {
 
 function saveAndResubmitMessage(index, newContent) {
   if (!appState || !appState.focusedNode) return;
-  
+
   try {
     const node = appState.focusedNode;
     let text = "";
     if (node && node.cachedRenderText != null) {
       text = String(node.cachedRenderText || "");
     }
-    
+
     const messages = parseChatML(text);
-    
+
     if (messages[index]) {
       messages[index].content = String(newContent || "").trim();
     }
-    
+
     const chatML = JSON.stringify({ messages }, null, 2);
-    
+
     appState.loomTree.updateNode(
       node,
       chatML,
       node.summary || "Edited message"
     );
-    
+
     if (DOM.editor) {
       DOM.editor.value = chatML;
     }
-    
+
     if (searchManager && node) {
       try {
         searchManager.updateNode(node, appState.loomTree.renderNode(node));
@@ -786,11 +901,11 @@ function saveAndResubmitMessage(index, newContent) {
         console.warn("Error updating search index:", e);
       }
     }
-    
+
     editingMessageIndex = null;
     renderChatView();
     updateTreeStatsDisplay();
-    
+
     // Generate new response (this will complete the assistant message)
     if (llmService && node) {
       const validation = validateChatML(DOM.editor ? DOM.editor.value : chatML);
@@ -813,19 +928,25 @@ function sendChatMessage() {
     console.error("Chat input element not found");
     return;
   }
-  
-  const inputText = DOM.chatInput.value ? String(DOM.chatInput.value).trim() : "";
+
+  const inputText = DOM.chatInput.value
+    ? String(DOM.chatInput.value).trim()
+    : "";
   if (!inputText) return;
-  
+
   if (!appState || !appState.focusedNode) {
     console.error("Cannot send message: appState or focusedNode is null");
     return;
   }
-  
+
   try {
     const node = appState.focusedNode;
     let currentText = "";
-    if (node && node.cachedRenderText != null && node.cachedRenderText !== undefined) {
+    if (
+      node &&
+      node.cachedRenderText != null &&
+      node.cachedRenderText !== undefined
+    ) {
       const renderText = node.cachedRenderText;
       if (typeof renderText === "string") {
         currentText = renderText;
@@ -833,7 +954,7 @@ function sendChatMessage() {
         currentText = String(renderText);
       }
     }
-    
+
     let messages = [];
     try {
       messages = parseChatML(currentText);
@@ -845,44 +966,80 @@ function sendChatMessage() {
       console.warn("Error parsing current ChatML, starting fresh:", e);
       messages = [];
     }
-    
+
     // Add new user message
     messages.push({ role: "user", content: inputText });
-    
+
     const chatML = JSON.stringify({ messages }, null, 2);
-    
-    // Update the node
-    appState.loomTree.updateNode(
-      node,
-      chatML,
-      node.summary || "New message"
-    );
-    
-    // Update editor value to keep in sync
-    if (DOM.editor) {
-      DOM.editor.value = chatML;
-    }
-    
-    // Clear input
+
+    // Clear input immediately for better UX
     DOM.chatInput.value = "";
     if (DOM.chatInput.style) {
       DOM.chatInput.style.height = "auto";
     }
-    
-    // Re-render chat view - use setTimeout to ensure state is updated
-    setTimeout(() => {
+
+    // Show loading state immediately
+    setChatGenerationLoading(true);
+
+    // Check if this is a new leaf node or if we need to create a child
+    if (
+      node.children.length > 0 ||
+      ["gen", "rewrite", "root"].includes(node.type)
+    ) {
+      // Create a new child node with the updated ChatML
+      const child = appState.loomTree.createNode(
+        "user",
+        node,
+        chatML,
+        "New message"
+      );
+
+      // Update search index for the new child
+      if (searchManager) {
+        try {
+          searchManager.addNodeToSearchIndex(
+            child,
+            appState.loomTree.renderNode(child)
+          );
+        } catch (e) {
+          console.warn("Error updating search index:", e);
+        }
+      }
+
+      // Update focus to the new child node
+      updateFocus(child.id, "chat-send");
+
+      // Now trigger generation on the new node
+      if (llmService) {
+        llmService.generateNewResponses(child.id);
+      }
+    } else {
+      // Update the existing node
+      appState.loomTree.updateNode(node, chatML, node.summary || "New message");
+
+      // Update editor value to keep in sync
+      if (DOM.editor) {
+        DOM.editor.value = chatML;
+      }
+
+      // Update search index
+      if (searchManager && node) {
+        try {
+          searchManager.updateNode(node, appState.loomTree.renderNode(node));
+        } catch (e) {
+          console.warn("Error updating search index:", e);
+        }
+      }
+
+      // Re-render chat view
       renderChatView();
-    }, 10);
-    
-    // Update search index
-    if (searchManager && node) {
-      try {
-        searchManager.updateNode(node, appState.loomTree.renderNode(node));
-      } catch (e) {
-        console.warn("Error updating search index:", e);
+
+      // Now trigger generation on the current node
+      if (llmService) {
+        llmService.generateNewResponses(node.id);
       }
     }
-    
+
     // Update stats
     updateTreeStatsDisplay();
   } catch (error) {
@@ -903,11 +1060,11 @@ function updateUI() {
   updateFocusedNodeStats();
   updateThumbState();
   updateErrorDisplay();
-  
+
   // Update chat toggle visibility and sync view mode
   // This may change chatViewMode and call updateViewMode()
   updateChatToggleVisibility();
-  
+
   // If we're in chat mode, ensure it's rendered
   if (chatViewMode === "chat" && isChatCompletionMethod()) {
     setTimeout(() => {
@@ -1364,6 +1521,9 @@ async function init() {
           const loomTree = appState.getLoomTree();
           loomTree.setNodeGenerationPending(nodeId, true);
           loomTree.clearNodeError(nodeId);
+
+          // Show chat loading indicator
+          setChatGenerationLoading(true);
         },
 
         onGenerationFinished: nodeId => {
@@ -1376,6 +1536,16 @@ async function init() {
           // Clear node generation pending state
           const loomTree = appState.getLoomTree();
           loomTree.setNodeGenerationPending(nodeId, false);
+
+          // Hide chat loading indicator
+          setChatGenerationLoading(false);
+
+          // Ensure chat view is updated after generation completes
+          if (chatViewMode === "chat" && isChatCompletionMethod()) {
+            setTimeout(() => {
+              renderChatView();
+            }, 50);
+          }
         },
 
         onGenerationFailed: (nodeId, errorMessage) => {
@@ -1384,6 +1554,9 @@ async function init() {
           // Set error on the node
           const loomTree = appState.getLoomTree();
           loomTree.setNodeError(nodeId, errorMessage);
+
+          // Clear chat loading indicator on failure
+          setChatGenerationLoading(false);
 
           // Trigger UI update to show the error
           updateErrorDisplay();
@@ -1559,26 +1732,33 @@ async function init() {
 
     // Chat input handlers
     if (DOM.chatInput) {
-      DOM.chatInput.addEventListener("keydown", (e) => {
+      DOM.chatInput.addEventListener("keydown", e => {
         if (e.key === "Enter" && !e.shiftKey) {
           e.preventDefault();
           sendChatMessage();
         }
       });
-      
+
       // Auto-resize textarea
       DOM.chatInput.addEventListener("input", () => {
         DOM.chatInput.style.height = "auto";
-        DOM.chatInput.style.height = Math.min(DOM.chatInput.scrollHeight, 120) + "px";
+        DOM.chatInput.style.height =
+          Math.min(DOM.chatInput.scrollHeight, 120) + "px";
       });
     }
 
     // Update chat toggle visibility when service/sampler changes
     if (DOM.serviceSelector) {
-      DOM.serviceSelector.addEventListener("change", updateChatToggleVisibility);
+      DOM.serviceSelector.addEventListener(
+        "change",
+        updateChatToggleVisibility
+      );
     }
     if (DOM.samplerSelector) {
-      DOM.samplerSelector.addEventListener("change", updateChatToggleVisibility);
+      DOM.samplerSelector.addEventListener(
+        "change",
+        updateChatToggleVisibility
+      );
     }
 
     // Tree stats tooltip handlers

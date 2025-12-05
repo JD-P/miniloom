@@ -654,26 +654,25 @@ class LLMService {
             repetition_penalty: Number(params.repetitionPenalty),
           };
 
-          const promise = HTTPClient.delay(apiDelay * i)
-            .then(() => {
-              const headers = {
-                accept: "application/json",
-                Authorization: authToken,
-                "HTTP-Referer": "https://github.com/JD-P/miniloom",
-                "X-Title": "MiniLoom",
-              };
+          const promise = HTTPClient.delay(apiDelay * i).then(() => {
+            const headers = {
+              accept: "application/json",
+              Authorization: authToken,
+              "HTTP-Referer": "https://github.com/JD-P/miniloom",
+              "X-Title": "MiniLoom",
+            };
 
-              return HTTPClient.makeRequest(params.apiUrl, {
-                headers,
-                body,
-              });
+            return HTTPClient.makeRequest(params.apiUrl, {
+              headers,
+              body,
             });
+          });
 
           batchPromises.push(promise);
         }
 
         const responses = await Promise.all(batchPromises);
-        
+
         // Process all responses
         for (const responseData of responses) {
           await this.processChatResponses(
@@ -816,15 +815,18 @@ class LLMService {
     for (const choice of responseData.choices) {
       const assistantMessage = choice.message;
       const newChatData = JSON.parse(JSON.stringify(chatData));
-      
+
       // Handle reasoning/answer structure (OpenRouter format)
       let messageContent = assistantMessage.content || "";
       const messageObj = {
         role: assistantMessage.role || "assistant",
       };
-      
+
       // Check if response has reasoning/answer fields
-      if (assistantMessage.reasoning !== undefined || assistantMessage.answer !== undefined) {
+      if (
+        assistantMessage.reasoning !== undefined ||
+        assistantMessage.answer !== undefined
+      ) {
         // Use reasoning/answer structure
         if (assistantMessage.reasoning) {
           messageObj.reasoning = assistantMessage.reasoning;
@@ -840,7 +842,7 @@ class LLMService {
         // Standard content field
         messageObj.content = messageContent;
       }
-      
+
       newChatData.messages.push(messageObj);
 
       const newChatText = JSON.stringify(newChatData, null, 2);
@@ -848,7 +850,8 @@ class LLMService {
       // Check if no tokens were generated and model finished
       const hasNoContent =
         (!messageContent || messageContent.trim() === "") &&
-        (!assistantMessage.reasoning && !assistantMessage.answer);
+        !assistantMessage.reasoning &&
+        !assistantMessage.answer;
       const isFinished =
         choice.finish_reason === "stop" ||
         choice.finish_reason === "end_turn" ||
@@ -858,8 +861,11 @@ class LLMService {
       if (hasNoContent && isFinished) {
         summary = "Branch Complete";
       } else {
-        const summaryText = messageContent || 
-          (assistantMessage.answer || assistantMessage.reasoning || "Assistant response");
+        const summaryText =
+          messageContent ||
+          assistantMessage.answer ||
+          assistantMessage.reasoning ||
+          "Assistant response";
         summary = await this.generateSummary(summaryText, capturedSettings);
       }
 
