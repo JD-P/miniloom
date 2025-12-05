@@ -1,14 +1,21 @@
 // HTTP request utilities
 class HTTPClient {
-  static async makeRequest(url, options) {
-    const response = await fetch(url, {
+  static async makeRequest(url, options, signal = null) {
+    const fetchOptions = {
       method: "POST",
       headers: {
         "Content-Type": "application/json; charset=UTF-8",
         ...options.headers,
       },
       body: JSON.stringify(options.body),
-    });
+    };
+
+    // Add abort signal if provided
+    if (signal) {
+      fetchOptions.signal = signal;
+    }
+
+    const response = await fetch(url, fetchOptions);
 
     if (!response.ok) {
       const errorMessage = await this.extractErrorMessage(response);
@@ -405,6 +412,22 @@ class LLMService {
     this.settingsProvider = dependencies.settingsProvider;
     this.dataProvider = dependencies.dataProvider;
     this.eventHandlers = dependencies.eventHandlers || {};
+    this.currentAbortController = null;
+  }
+
+  // Cancel any ongoing generation
+  cancelGeneration() {
+    if (this.currentAbortController) {
+      this.currentAbortController.abort();
+      this.currentAbortController = null;
+      return true;
+    }
+    return false;
+  }
+
+  // Check if generation is in progress
+  isGenerating() {
+    return this.currentAbortController !== null;
   }
 
   // Configuration and parameter management
@@ -575,7 +598,7 @@ class LLMService {
   async generateWithProvider(nodeId, providerType, capturedSettings = null) {
     await this.executeGeneration(
       nodeId,
-      async () => {
+      async signal => {
         const params = this.prepareGenerationParams(capturedSettings);
         const prompt = this.dataProvider.getCurrentPrompt();
 
@@ -589,6 +612,7 @@ class LLMService {
           topK: params.topK,
           repetitionPenalty: params.repetitionPenalty,
           delay: params.apiDelay,
+          signal: signal, // Pass abort signal to provider
         };
 
         const newResponses = await APIClient.callProvider(
@@ -607,7 +631,7 @@ class LLMService {
   async generateWithOpenAIChat(nodeId, capturedSettings = null) {
     await this.executeGeneration(
       nodeId,
-      async () => {
+      async signal => {
         const params = this.prepareGenerationParams(capturedSettings);
         const loomTree = this.dataProvider.getLoomTree();
         const rollFocus = loomTree.nodeStore[nodeId];
@@ -617,10 +641,14 @@ class LLMService {
         const requestBody = this.buildChatRequestBody(chatData, params);
         const headers = this.buildChatRequestHeaders(params);
 
-        const responseData = await HTTPClient.makeRequest(params.apiUrl, {
-          headers,
-          body: requestBody,
-        });
+        const responseData = await HTTPClient.makeRequest(
+          params.apiUrl,
+          {
+            headers,
+            body: requestBody,
+          },
+          signal
+        );
 
         await this.processChatResponses(
           responseData,
@@ -639,7 +667,7 @@ class LLMService {
   async generateWithOpenRouterChat(nodeId, capturedSettings = null) {
     await this.executeGeneration(
       nodeId,
-      async () => {
+      async signal => {
         const params = this.prepareGenerationParams(capturedSettings);
         const loomTree = this.dataProvider.getLoomTree();
         const rollFocus = loomTree.nodeStore[nodeId];
@@ -672,6 +700,11 @@ class LLMService {
           }
 
           const promise = HTTPClient.delay(apiDelay * i).then(() => {
+            // Check if aborted before making request
+            if (signal && signal.aborted) {
+              throw new DOMException("Aborted", "AbortError");
+            }
+
             const headers = {
               accept: "application/json",
               Authorization: authToken,
@@ -679,10 +712,14 @@ class LLMService {
               "X-Title": "MiniLoom",
             };
 
-            return HTTPClient.makeRequest(params.apiUrl, {
-              headers,
-              body,
-            });
+            return HTTPClient.makeRequest(
+              params.apiUrl,
+              {
+                headers,
+                body,
+              },
+              signal
+            );
           });
 
           batchPromises.push(promise);
@@ -709,6 +746,10 @@ class LLMService {
 
   // Common generation execution pattern
   async executeGeneration(nodeId, generationFunction, capturedSettings = null) {
+    // Create abort controller for this generation
+    this.currentAbortController = new AbortController();
+    const signal = this.currentAbortController.signal;
+
     if (this.eventHandlers.onGenerationStarted) {
       this.eventHandlers.onGenerationStarted(nodeId);
     }
@@ -720,7 +761,7 @@ class LLMService {
       const rollFocus = this.dataProvider.getLoomTree().nodeStore[nodeId];
       const lastChildIndex = this.getLastChildIndex(rollFocus);
 
-      const newResponses = await generationFunction();
+      const newResponses = await generationFunction(signal);
 
       if (newResponses.length > 0) {
         await this.processResponses(
@@ -736,11 +777,21 @@ class LLMService {
         this.eventHandlers.onGenerationCompleted(nodeId, newResponses);
       }
     } catch (error) {
+      // Check if this was a user-initiated cancellation
+      if (error.name === "AbortError") {
+        if (this.eventHandlers.onGenerationCancelled) {
+          this.eventHandlers.onGenerationCancelled(nodeId);
+        }
+        // Don't rethrow abort errors - they're expected
+        return;
+      }
+
       if (this.eventHandlers.onGenerationFailed) {
         this.eventHandlers.onGenerationFailed(nodeId, error.message);
       }
       throw error;
     } finally {
+      this.currentAbortController = null;
       if (this.eventHandlers.onGenerationFinished) {
         this.eventHandlers.onGenerationFinished(nodeId);
       }

@@ -1164,14 +1164,20 @@ function renderChatView(options = {}) {
 function setChatGenerationLoading(isLoading) {
   chatGenerationInProgress = isLoading;
 
-  // Update send button state
+  // Update send button state - transform into stop button when loading
   if (DOM.chatSendButton) {
     if (isLoading) {
       DOM.chatSendButton.classList.add("loading");
-      DOM.chatSendButton.disabled = true;
+      DOM.chatSendButton.classList.add("stop-mode");
+      DOM.chatSendButton.disabled = false; // Enable so user can click to stop
+      DOM.chatSendButton.innerHTML = "⏹"; // Stop icon
+      DOM.chatSendButton.title = "Stop generation";
     } else {
       DOM.chatSendButton.classList.remove("loading");
+      DOM.chatSendButton.classList.remove("stop-mode");
       DOM.chatSendButton.disabled = false;
+      DOM.chatSendButton.innerHTML = "➤"; // Send icon
+      DOM.chatSendButton.title = "Send message";
     }
   }
 
@@ -1438,6 +1444,25 @@ function rerollFromCurrentChat() {
 }
 
 // Removed updateChatMLFromUI - now using explicit save functions
+
+// Cancel ongoing chat generation
+function cancelChatGeneration() {
+  if (llmService && llmService.cancelGeneration) {
+    const cancelled = llmService.cancelGeneration();
+    if (cancelled) {
+      // Clear loading state immediately
+      setChatGenerationLoading(false);
+      // Show a brief message
+      showChatError("Generation cancelled");
+      // Clear the error after a moment
+      setTimeout(() => {
+        if (DOM.chatErrorDisplay) {
+          DOM.chatErrorDisplay.style.display = "none";
+        }
+      }, 2000);
+    }
+  }
+}
 
 function sendChatMessage() {
   if (!DOM.chatInput) {
@@ -2088,6 +2113,22 @@ async function init() {
           updateErrorDisplay();
         },
 
+        onGenerationCancelled: nodeId => {
+          console.log("Generation cancelled by user");
+
+          // Clear chat loading indicator
+          setChatGenerationLoading(false);
+
+          // Clear node generation pending state
+          const loomTree = appState.getLoomTree();
+          loomTree.setNodeGenerationPending(nodeId, false);
+
+          // Update chat view if in chat mode
+          if (chatViewMode === "chat" && isChatCompletionMethod()) {
+            renderChatView();
+          }
+        },
+
         onPreGeneration: async nodeId => {
           // Auto-save and update summary before generation
           await fileManager.autoSaveTick();
@@ -2251,9 +2292,17 @@ async function init() {
       });
     }
 
-    // Chat send button handler
+    // Chat send button handler - also handles stop functionality
     if (DOM.chatSendButton) {
-      DOM.chatSendButton.addEventListener("click", sendChatMessage);
+      DOM.chatSendButton.addEventListener("click", () => {
+        if (chatGenerationInProgress) {
+          // Cancel the ongoing generation
+          cancelChatGeneration();
+        } else {
+          // Send new message
+          sendChatMessage();
+        }
+      });
     }
 
     // Chat input handlers

@@ -892,24 +892,19 @@ select {
   opacity: 0.7;
 }
 
-.chat-send-button.loading {
-  position: relative;
-  color: transparent;
+/* Stop mode styling - button becomes a stop button during generation */
+.chat-send-button.stop-mode {
+  background-color: #c94a4a;
+  cursor: pointer;
+  opacity: 1;
 }
 
-.chat-send-button.loading::after {
-  content: "";
-  position: absolute;
-  width: 16px;
-  height: 16px;
-  top: 50%;
-  left: 50%;
-  margin-left: -8px;
-  margin-top: -8px;
-  border: 2px solid #fff;
-  border-radius: 50%;
-  border-top-color: transparent;
-  animation: spin 0.8s linear infinite;
+.chat-send-button.stop-mode:hover {
+  background-color: #b33a3a;
+}
+
+.chat-send-button.stop-mode:active {
+  transform: scale(0.98);
 }
 
 .chat-loading-indicator {
