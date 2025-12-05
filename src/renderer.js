@@ -795,6 +795,7 @@ function renderChatView() {
     actions.className = "chat-message-actions";
 
     const messageContent = getMessageContent(msg) || "";
+    const isLastMessage = index === messages.length - 1;
 
     const copyBtn = document.createElement("button");
     copyBtn.className = "chat-action-btn copy-btn";
@@ -817,6 +818,19 @@ function renderChatView() {
     actions.appendChild(copyBtn);
     actions.appendChild(editBtn);
 
+    // Add reroll button only on the last message
+    if (isLastMessage && !chatGenerationInProgress) {
+      const rerollBtn = document.createElement("button");
+      rerollBtn.className = "chat-action-btn reroll-btn";
+      rerollBtn.title = "Generate more responses from this point";
+      rerollBtn.innerHTML = "🎲";
+      rerollBtn.addEventListener("click", e => {
+        e.stopPropagation();
+        rerollFromCurrentChat();
+      });
+      actions.appendChild(rerollBtn);
+    }
+
     const content = document.createElement("div");
     content.className = "chat-message-content";
 
@@ -837,9 +851,8 @@ function renderChatView() {
         saveEditedMessage(index, editTextarea.value);
       });
 
-      const isLastAssistant =
-        role === "assistant" && index === messages.length - 1;
-      if (isLastAssistant) {
+      // Show "Save and Resubmit" for the last message (user or assistant)
+      if (isLastMessage) {
         const saveResubmitBtn = document.createElement("button");
         saveResubmitBtn.className = "chat-edit-btn save-resubmit-btn";
         saveResubmitBtn.textContent = "Save and Resubmit";
@@ -1102,6 +1115,42 @@ function saveAndResubmitMessage(index, newContent) {
     console.error("Error saving and resubmitting message:", error);
     setChatGenerationLoading(false);
     alert("Error saving message: " + (error.message || String(error)));
+  }
+}
+
+// Reroll from current chat - generate more children from the current state
+function rerollFromCurrentChat() {
+  if (!appState || !appState.focusedNode) {
+    console.error("Cannot reroll: appState or focusedNode is null");
+    return;
+  }
+
+  // Validate settings before attempting to generate
+  if (!validateGenerationSettings()) {
+    return;
+  }
+
+  try {
+    const node = appState.focusedNode;
+
+    // Validate the current ChatML
+    const validation = validateChatML(node.cachedRenderText || "");
+    if (!validation.valid) {
+      alert(`Invalid ChatML: ${validation.error}`);
+      return;
+    }
+
+    // Show loading state
+    setChatGenerationLoading(true);
+
+    // Generate new responses on the current node
+    if (llmService) {
+      llmService.generateNewResponses(node.id);
+    }
+  } catch (error) {
+    console.error("Error rerolling chat:", error);
+    setChatGenerationLoading(false);
+    alert("Error generating response: " + (error.message || String(error)));
   }
 }
 

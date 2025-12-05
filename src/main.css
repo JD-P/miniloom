@@ -544,6 +544,16 @@ select {
     color 0.2s ease;
 }
 
+.chat-action-btn.reroll-btn {
+  background-color: rgba(213, 4, 2, 0.1);
+  border-radius: 4px;
+}
+
+.chat-action-btn.reroll-btn:hover {
+  background-color: rgba(213, 4, 2, 0.2);
+  opacity: 1;
+}
+
 .chat-message-content {
   font-size: 14px;
   line-height: 1.6;
