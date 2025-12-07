@@ -1,14 +1,21 @@
 // HTTP request utilities
 class HTTPClient {
-  static async makeRequest(url, options) {
-    const response = await fetch(url, {
+  static async makeRequest(url, options, signal = null) {
+    const fetchOptions = {
       method: "POST",
       headers: {
         "Content-Type": "application/json; charset=UTF-8",
         ...options.headers,
       },
       body: JSON.stringify(options.body),
-    });
+    };
+
+    // Add abort signal if provided
+    if (signal) {
+      fetchOptions.signal = signal;
+    }
+
+    const response = await fetch(url, fetchOptions);
 
     if (!response.ok) {
       const errorMessage = await this.extractErrorMessage(response);
@@ -405,6 +412,22 @@ class LLMService {
     this.settingsProvider = dependencies.settingsProvider;
     this.dataProvider = dependencies.dataProvider;
     this.eventHandlers = dependencies.eventHandlers || {};
+    this.currentAbortController = null;
+  }
+
+  // Cancel any ongoing generation
+  cancelGeneration() {
+    if (this.currentAbortController) {
+      this.currentAbortController.abort();
+      this.currentAbortController = null;
+      return true;
+    }
+    return false;
+  }
+
+  // Check if generation is in progress
+  isGenerating() {
+    return this.currentAbortController !== null;
   }
 
   // Configuration and parameter management
@@ -440,6 +463,15 @@ class LLMService {
       topP: parseFloat(samplerData["top-p"]) || 1,
       topK: parseInt(samplerData["top-k"]) || 100,
       repetitionPenalty: parseFloat(samplerData["repetition-penalty"]) || 1,
+
+      // Chat completion settings
+      systemPrompt: samplerData["system-prompt"] || "",
+
+      // Reasoning parameters (for OpenRouter models that support it)
+      reasoningEnabled:
+        samplerData["reasoning-enabled"] === true ||
+        samplerData["reasoning-enabled"] === "true",
+      reasoningEffort: samplerData["reasoning-effort"] || "medium",
     };
   }
 
@@ -566,7 +598,7 @@ class LLMService {
   async generateWithProvider(nodeId, providerType, capturedSettings = null) {
     await this.executeGeneration(
       nodeId,
-      async () => {
+      async signal => {
         const params = this.prepareGenerationParams(capturedSettings);
         const prompt = this.dataProvider.getCurrentPrompt();
 
@@ -580,6 +612,7 @@ class LLMService {
           topK: params.topK,
           repetitionPenalty: params.repetitionPenalty,
           delay: params.apiDelay,
+          signal: signal, // Pass abort signal to provider
         };
 
         const newResponses = await APIClient.callProvider(
@@ -598,20 +631,24 @@ class LLMService {
   async generateWithOpenAIChat(nodeId, capturedSettings = null) {
     await this.executeGeneration(
       nodeId,
-      async () => {
+      async signal => {
         const params = this.prepareGenerationParams(capturedSettings);
         const loomTree = this.dataProvider.getLoomTree();
         const rollFocus = loomTree.nodeStore[nodeId];
         const promptText = loomTree.renderNode(rollFocus);
 
-        const chatData = this.parseChatData(promptText);
+        const chatData = this.parseChatData(promptText, params.systemPrompt);
         const requestBody = this.buildChatRequestBody(chatData, params);
         const headers = this.buildChatRequestHeaders(params);
 
-        const responseData = await HTTPClient.makeRequest(params.apiUrl, {
-          headers,
-          body: requestBody,
-        });
+        const responseData = await HTTPClient.makeRequest(
+          params.apiUrl,
+          {
+            headers,
+            body: requestBody,
+          },
+          signal
+        );
 
         await this.processChatResponses(
           responseData,
@@ -630,13 +667,13 @@ class LLMService {
   async generateWithOpenRouterChat(nodeId, capturedSettings = null) {
     await this.executeGeneration(
       nodeId,
-      async () => {
+      async signal => {
         const params = this.prepareGenerationParams(capturedSettings);
         const loomTree = this.dataProvider.getLoomTree();
         const rollFocus = loomTree.nodeStore[nodeId];
         const promptText = loomTree.renderNode(rollFocus);
 
-        const chatData = this.parseChatData(promptText);
+        const chatData = this.parseChatData(promptText, params.systemPrompt);
         const authToken = `Bearer ${params.apiKey}`;
         const apiDelay = Number(params.apiDelay || 0);
 
@@ -654,26 +691,42 @@ class LLMService {
             repetition_penalty: Number(params.repetitionPenalty),
           };
 
-          const promise = HTTPClient.delay(apiDelay * i)
-            .then(() => {
-              const headers = {
-                accept: "application/json",
-                Authorization: authToken,
-                "HTTP-Referer": "https://github.com/JD-P/miniloom",
-                "X-Title": "MiniLoom",
-              };
+          // Add reasoning parameters if enabled (for models that support it)
+          if (params.reasoningEnabled) {
+            body.reasoning = {
+              enabled: true,
+              effort: params.reasoningEffort || "medium",
+            };
+          }
 
-              return HTTPClient.makeRequest(params.apiUrl, {
+          const promise = HTTPClient.delay(apiDelay * i).then(() => {
+            // Check if aborted before making request
+            if (signal && signal.aborted) {
+              throw new DOMException("Aborted", "AbortError");
+            }
+
+            const headers = {
+              accept: "application/json",
+              Authorization: authToken,
+              "HTTP-Referer": "https://github.com/JD-P/miniloom",
+              "X-Title": "MiniLoom",
+            };
+
+            return HTTPClient.makeRequest(
+              params.apiUrl,
+              {
                 headers,
                 body,
-              });
-            });
+              },
+              signal
+            );
+          });
 
           batchPromises.push(promise);
         }
 
         const responses = await Promise.all(batchPromises);
-        
+
         // Process all responses
         for (const responseData of responses) {
           await this.processChatResponses(
@@ -693,6 +746,10 @@ class LLMService {
 
   // Common generation execution pattern
   async executeGeneration(nodeId, generationFunction, capturedSettings = null) {
+    // Create abort controller for this generation
+    this.currentAbortController = new AbortController();
+    const signal = this.currentAbortController.signal;
+
     if (this.eventHandlers.onGenerationStarted) {
       this.eventHandlers.onGenerationStarted(nodeId);
     }
@@ -704,7 +761,7 @@ class LLMService {
       const rollFocus = this.dataProvider.getLoomTree().nodeStore[nodeId];
       const lastChildIndex = this.getLastChildIndex(rollFocus);
 
-      const newResponses = await generationFunction();
+      const newResponses = await generationFunction(signal);
 
       if (newResponses.length > 0) {
         await this.processResponses(
@@ -720,11 +777,21 @@ class LLMService {
         this.eventHandlers.onGenerationCompleted(nodeId, newResponses);
       }
     } catch (error) {
+      // Check if this was a user-initiated cancellation
+      if (error.name === "AbortError") {
+        if (this.eventHandlers.onGenerationCancelled) {
+          this.eventHandlers.onGenerationCancelled(nodeId);
+        }
+        // Don't rethrow abort errors - they're expected
+        return;
+      }
+
       if (this.eventHandlers.onGenerationFailed) {
         this.eventHandlers.onGenerationFailed(nodeId, error.message);
       }
       throw error;
     } finally {
+      this.currentAbortController = null;
       if (this.eventHandlers.onGenerationFinished) {
         this.eventHandlers.onGenerationFinished(nodeId);
       }
@@ -816,15 +883,18 @@ class LLMService {
     for (const choice of responseData.choices) {
       const assistantMessage = choice.message;
       const newChatData = JSON.parse(JSON.stringify(chatData));
-      
+
       // Handle reasoning/answer structure (OpenRouter format)
       let messageContent = assistantMessage.content || "";
       const messageObj = {
         role: assistantMessage.role || "assistant",
       };
-      
+
       // Check if response has reasoning/answer fields
-      if (assistantMessage.reasoning !== undefined || assistantMessage.answer !== undefined) {
+      if (
+        assistantMessage.reasoning !== undefined ||
+        assistantMessage.answer !== undefined
+      ) {
         // Use reasoning/answer structure
         if (assistantMessage.reasoning) {
           messageObj.reasoning = assistantMessage.reasoning;
@@ -840,7 +910,7 @@ class LLMService {
         // Standard content field
         messageObj.content = messageContent;
       }
-      
+
       newChatData.messages.push(messageObj);
 
       const newChatText = JSON.stringify(newChatData, null, 2);
@@ -848,7 +918,8 @@ class LLMService {
       // Check if no tokens were generated and model finished
       const hasNoContent =
         (!messageContent || messageContent.trim() === "") &&
-        (!assistantMessage.reasoning && !assistantMessage.answer);
+        !assistantMessage.reasoning &&
+        !assistantMessage.answer;
       const isFinished =
         choice.finish_reason === "stop" ||
         choice.finish_reason === "end_turn" ||
@@ -858,8 +929,11 @@ class LLMService {
       if (hasNoContent && isFinished) {
         summary = "Branch Complete";
       } else {
-        const summaryText = messageContent || 
-          (assistantMessage.answer || assistantMessage.reasoning || "Assistant response");
+        const summaryText =
+          messageContent ||
+          assistantMessage.answer ||
+          assistantMessage.reasoning ||
+          "Assistant response";
         summary = await this.generateSummary(summaryText, capturedSettings);
       }
 
@@ -893,17 +967,36 @@ class LLMService {
   }
 
   // Chat-specific utilities
-  parseChatData(promptText) {
+  parseChatData(promptText, systemPrompt = "") {
     try {
       const chatData = JSON.parse(promptText);
       if (!chatData.messages || !Array.isArray(chatData.messages)) {
         throw new Error("Invalid chat format: messages array not found");
       }
+
+      // Add system prompt if configured and not already present
+      if (systemPrompt && systemPrompt.trim()) {
+        const hasSystemMessage = chatData.messages.some(
+          msg => msg.role === "system"
+        );
+        if (!hasSystemMessage) {
+          chatData.messages.unshift({
+            role: "system",
+            content: systemPrompt.trim(),
+          });
+        }
+      }
+
       return chatData;
     } catch (jsonError) {
-      return {
-        messages: [{ role: "user", content: promptText.trim() }],
-      };
+      const messages = [{ role: "user", content: promptText.trim() }];
+
+      // Add system prompt if configured
+      if (systemPrompt && systemPrompt.trim()) {
+        messages.unshift({ role: "system", content: systemPrompt.trim() });
+      }
+
+      return { messages };
     }
   }
 

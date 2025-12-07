@@ -488,6 +488,16 @@ select {
   border-left: 3px solid #999;
 }
 
+.chat-message.system {
+  background-color: rgba(0, 123, 255, 0.08);
+  border-left: 3px solid var(--button-secondary);
+  font-style: italic;
+}
+
+.chat-message.system .chat-message-header {
+  color: var(--button-secondary);
+}
+
 .chat-message-header {
   font-size: 11px;
   font-weight: 600;
@@ -495,9 +505,6 @@ select {
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
 }
 
 .chat-message.user .chat-message-header {
@@ -509,6 +516,8 @@ select {
   gap: 4px;
   opacity: 0;
   transition: opacity 0.2s;
+  margin-top: 8px;
+  justify-content: flex-end;
 }
 
 .chat-action-btn {
@@ -525,6 +534,45 @@ select {
 .chat-action-btn:hover {
   opacity: 1;
   background-color: rgba(0, 0, 0, 0.05);
+}
+
+.chat-action-btn.copy-success {
+  color: #28a745;
+  opacity: 1;
+  transition:
+    transform 0.15s ease,
+    color 0.2s ease;
+}
+
+.chat-action-btn.reroll-btn:hover {
+  opacity: 1;
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.chat-action-btn.thumb-btn {
+  transition: all 0.2s ease;
+}
+
+.chat-action-btn.thumb-btn.active {
+  opacity: 1;
+}
+
+.chat-action-btn.thumb-btn.thumb-up-active {
+  color: #28a745;
+  background-color: rgba(40, 167, 69, 0.15);
+}
+
+.chat-action-btn.thumb-btn.thumb-up-active:hover {
+  background-color: rgba(40, 167, 69, 0.25);
+}
+
+.chat-action-btn.thumb-btn.thumb-down-active {
+  color: #dc3545;
+  background-color: rgba(220, 53, 69, 0.15);
+}
+
+.chat-action-btn.thumb-btn.thumb-down-active:hover {
+  background-color: rgba(220, 53, 69, 0.25);
 }
 
 .chat-message-content {
@@ -552,9 +600,15 @@ select {
   font-weight: 600;
 }
 
-.chat-message-content h1 { font-size: 1.5em; }
-.chat-message-content h2 { font-size: 1.3em; }
-.chat-message-content h3 { font-size: 1.1em; }
+.chat-message-content h1 {
+  font-size: 1.5em;
+}
+.chat-message-content h2 {
+  font-size: 1.3em;
+}
+.chat-message-content h3 {
+  font-size: 1.1em;
+}
 
 .chat-message-content ul,
 .chat-message-content ol {
@@ -633,9 +687,88 @@ select {
   line-height: 1.5;
 }
 
-.chat-message-content .math-inline,
+.chat-message-content .math-inline {
+  /* Inline math should not add margins */
+}
+
 .chat-message-content .math-display {
-  margin: 8px 0;
+  display: block;
+  margin: 16px 0;
+  text-align: center;
+  overflow-x: auto;
+}
+
+/* MathJax SVG output styling */
+.chat-message-content mjx-container {
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
+}
+
+.chat-message-content mjx-container[jax="SVG"] {
+  direction: ltr;
+}
+
+.chat-message-content mjx-container svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Reasoning block styling */
+.chat-message-content .reasoning-block {
+  margin: 0 0 16px 0;
+  padding: 0;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  background-color: rgba(0, 0, 0, 0.02);
+  overflow: hidden;
+}
+
+.chat-message-content .reasoning-summary {
+  cursor: pointer;
+  padding: 10px 14px;
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--text-secondary);
+  background-color: rgba(0, 0, 0, 0.03);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chat-message-content .reasoning-summary:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.chat-message-content .reasoning-block[open] .reasoning-summary {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.chat-message-content .reasoning-block:not([open]) .reasoning-summary {
+  border-bottom: none;
+}
+
+.chat-message-content .reasoning-content {
+  padding: 12px 14px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.chat-message-content .reasoning-content p {
+  margin: 0 0 8px 0;
+}
+
+.chat-message-content .reasoning-content p:last-child {
+  margin-bottom: 0;
+}
+
+.chat-message-content .answer-content {
+  margin-top: 0;
 }
 
 .chat-message-edit-input {
@@ -725,6 +858,12 @@ select {
   box-shadow: 0 0 0 2px rgba(213, 4, 2, 0.2);
 }
 
+.chat-input:disabled {
+  background-color: var(--bg-secondary);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
 .chat-send-button {
   padding: 8px 20px;
   background-color: var(--engineering-orange);
@@ -745,6 +884,71 @@ select {
 
 .chat-send-button:active {
   transform: scale(0.98);
+}
+
+.chat-send-button:disabled {
+  background-color: #999;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* Stop mode styling - button becomes a stop button during generation */
+.chat-send-button.stop-mode {
+  background-color: #c94a4a;
+  cursor: pointer;
+  opacity: 1;
+}
+
+.chat-send-button.stop-mode:hover {
+  background-color: #b33a3a;
+}
+
+.chat-send-button.stop-mode:active {
+  transform: scale(0.98);
+}
+
+.chat-loading-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background-color: #f5f5f5;
+  border-left: 3px solid #999;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.chat-loading-indicator .loading-dots {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.chat-loading-indicator .loading-dot {
+  width: 6px;
+  height: 6px;
+  background-color: #999;
+  border-radius: 50%;
+  animation: loadingDot 1.4s infinite ease-in-out both;
+}
+
+.chat-loading-indicator .loading-dot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.chat-loading-indicator .loading-dot:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes loadingDot {
+  0%,
+  80%,
+  100% {
+    transform: scale(0);
+  }
+  40% {
+    transform: scale(1);
+  }
 }
 
 /* Controls Layout */
@@ -1580,6 +1784,25 @@ table.keys td:nth-child(2) {
 
 .control-group select:hover {
   border-color: var(--border-hover);
+}
+
+/* Warning flash animation for settings validation */
+.control-group select.warning-flash {
+  animation: warningFlash 0.5s ease-in-out 3;
+  border-color: #ffc107 !important;
+  box-shadow: 0 0 8px rgba(255, 193, 7, 0.6) !important;
+}
+
+@keyframes warningFlash {
+  0%,
+  100% {
+    background-color: white;
+    border-color: #ffc107;
+  }
+  50% {
+    background-color: #fff3cd;
+    border-color: #ffc107;
+  }
 }
 
 .generate-button-container {
