@@ -2221,6 +2221,9 @@ async function init() {
     populateApiKeySelector();
     renderFavoritesButtons();
 
+    // Add change listeners to save settings when selectors change
+    addSettingsChangeListeners();
+
     // Set up additional event handlers
     if (DOM.thumbUp) {
       DOM.thumbUp.onclick = () => handleThumbRating(true);
