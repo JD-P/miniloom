@@ -28,6 +28,12 @@ const SERVICE_DEFAULTS = {
     "service-model-name": "deepseek/deepseek-v3-base:free",
     "service-api-delay": "3000",
   },
+  "openrouter-chat": {
+    "sampling-method": "openrouter-chat",
+    "service-api-url": "https://openrouter.ai/api/v1/chat/completions",
+    "service-model-name": "deepseek/deepseek-v3-base:free",
+    "service-api-delay": "3000",
+  },
   openai: {
     "sampling-method": "openai",
     "service-api-url": "https://api.openai.com/v1/completions",
@@ -62,6 +68,9 @@ const DEFAULT_SAMPLER = {
   "top-p": "1",
   "top-k": "100",
   "repetition-penalty": "1",
+  "system-prompt": "",
+  "reasoning-enabled": "false",
+  "reasoning-effort": "medium",
 };
 
 // State
@@ -315,6 +324,9 @@ function populateSamplerForm(samplerName = null, samplerData = null) {
     setValue("top-p", samplerData["top-p"] || "");
     setValue("top-k", samplerData["top-k"] || "");
     setValue("repetition-penalty", samplerData["repetition-penalty"] || "");
+    setValue("system-prompt", samplerData["system-prompt"] || "");
+    setValue("reasoning-enabled", samplerData["reasoning-enabled"] || "false");
+    setValue("reasoning-effort", samplerData["reasoning-effort"] || "medium");
     setDisplay("delete-sampler-btn", true);
     originalSamplerData = { ...samplerData };
   } else {
@@ -328,6 +340,9 @@ function populateSamplerForm(samplerName = null, samplerData = null) {
     setValue("top-p", defaults["top-p"]);
     setValue("top-k", defaults["top-k"]);
     setValue("repetition-penalty", defaults["repetition-penalty"]);
+    setValue("system-prompt", defaults["system-prompt"]);
+    setValue("reasoning-enabled", defaults["reasoning-enabled"]);
+    setValue("reasoning-effort", defaults["reasoning-effort"]);
     setDisplay("delete-sampler-btn", false);
     originalSamplerData = null;
   }
@@ -341,6 +356,9 @@ function saveSampler() {
   const topP = getValue("top-p");
   const topK = getValue("top-k");
   const penalty = getValue("repetition-penalty");
+  const systemPrompt = getValue("system-prompt");
+  const reasoningEnabled = getValue("reasoning-enabled");
+  const reasoningEffort = getValue("reasoning-effort");
 
   if (!utils.validateFieldStringType(name, "modelNameType")) {
     alert(
@@ -374,6 +392,9 @@ function saveSampler() {
     "top-p": topP,
     "top-k": topK,
     "repetition-penalty": penalty,
+    "system-prompt": systemPrompt,
+    "reasoning-enabled": reasoningEnabled,
+    "reasoning-effort": reasoningEffort,
   };
 
   samplers[name] = samplerData;
@@ -453,6 +474,9 @@ function checkSamplerChanges() {
   const currentTopP = getValue("top-p");
   const currentTopK = getValue("top-k");
   const currentPenalty = getValue("repetition-penalty");
+  const currentSystemPrompt = getValue("system-prompt");
+  const currentReasoningEnabled = getValue("reasoning-enabled");
+  const currentReasoningEffort = getValue("reasoning-effort");
 
   return (
     currentName !== currentEditingSampler ||
@@ -461,7 +485,12 @@ function checkSamplerChanges() {
     currentTemp !== originalSamplerData["temperature"] ||
     currentTopP !== originalSamplerData["top-p"] ||
     currentTopK !== originalSamplerData["top-k"] ||
-    currentPenalty !== originalSamplerData["repetition-penalty"]
+    currentPenalty !== originalSamplerData["repetition-penalty"] ||
+    currentSystemPrompt !== (originalSamplerData["system-prompt"] || "") ||
+    currentReasoningEnabled !==
+      (originalSamplerData["reasoning-enabled"] || "false") ||
+    currentReasoningEffort !==
+      (originalSamplerData["reasoning-effort"] || "medium")
   );
 }
 

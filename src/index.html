@@ -6,9 +6,38 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src *;"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; script-src-elem 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src *; font-src 'self' data: blob:; worker-src 'self' blob:;"
     />
     <link rel="stylesheet" href="main.css" />
+    <link
+      rel="stylesheet"
+      href="../node_modules/highlight.js/styles/default.min.css"
+    />
+    <script>
+      window.MathJax = {
+        tex: {
+          inlineMath: [["\\(", "\\)"]],
+          displayMath: [["\\[", "\\]"]],
+          processEscapes: true,
+          processEnvironments: true,
+        },
+        svg: {
+          fontCache: "local",
+        },
+        options: {
+          skipHtmlTags: ["script", "noscript", "style", "textarea", "pre"],
+          ignoreHtmlClass: "no-math",
+        },
+        startup: {
+          typeset: false, // Don't typeset on page load, we'll do it manually
+        },
+      };
+    </script>
+    <script
+      id="MathJax-script"
+      async
+      src="../node_modules/mathjax/tex-mml-svg.js"
+    ></script>
   </head>
   <body>
     <div id="tree-stats-tooltip" class="tooltip" style="display: none"></div>
@@ -48,6 +77,20 @@
             class="editor"
             placeholder="Your prompt goes here."
           ></textarea>
+          <div id="chat-view" class="chat-view" style="display: none">
+            <div id="chat-messages" class="chat-messages"></div>
+            <div id="chat-input-container" class="chat-input-container">
+              <textarea
+                id="chat-input"
+                class="chat-input"
+                placeholder="Type your message..."
+                rows="1"
+              ></textarea>
+              <button id="chat-send-button" class="chat-send-button">
+                Send
+              </button>
+            </div>
+          </div>
           <div id="editor-footer" class="editor-footer">
             <div id="editor-stats" class="editor-stats">
               <span title="Word count"
@@ -64,6 +107,16 @@
                 >
                 chars</span
               >
+            </div>
+            <div
+              id="chat-toggle-container"
+              class="chat-toggle-container"
+              style="display: none"
+            >
+              <div id="chat-toggle" class="chat-toggle">
+                <span class="toggle-option" data-mode="text">Text</span>
+                <span class="toggle-option active" data-mode="chat">Chat</span>
+              </div>
             </div>
           </div>
         </div>
@@ -187,6 +240,9 @@
         style="display: none"
       ></div>
     </div>
+    <script src="../node_modules/marked/lib/marked.umd.js"></script>
+    <!-- Note: highlight.js CommonJS module not compatible with browser - syntax highlighting disabled -->
+    <!-- To enable, use a CDN or bundled version of highlight.js -->
     <script src="utils.js"></script>
     <script src="model.js"></script>
     <script src="llm-service.js"></script>

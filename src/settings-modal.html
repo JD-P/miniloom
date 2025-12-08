@@ -85,6 +85,9 @@
                 <option value="openai">OpenAI Completions</option>
                 <option value="openai-chat">OpenAI Chat Completions</option>
                 <option value="openrouter">OpenRouter API</option>
+                <option value="openrouter-chat">
+                  OpenRouter Chat Completions
+                </option>
                 <option value="together">Together API</option>
                 <option value="anthropic">Anthropic Claude</option>
                 <option value="google">Google Gemini</option>
@@ -224,6 +227,53 @@
                 class="floatType"
                 placeholder="1"
               />
+            </div>
+          </div>
+
+          <div class="divider"></div>
+          <p class="muted" style="margin-bottom: 8px">
+            Chat Completions Settings
+          </p>
+
+          <div class="form-field">
+            <label for="system-prompt">Default System Prompt</label>
+            <textarea
+              id="system-prompt"
+              rows="3"
+              placeholder="You are a helpful assistant."
+              style="
+                width: 100%;
+                resize: vertical;
+                font-family: inherit;
+                font-size: 14px;
+                padding: 8px;
+                border: 1px solid rgba(0, 0, 0, 0.2);
+                border-radius: 6px;
+              "
+            ></textarea>
+            <span
+              class="muted"
+              style="font-size: 12px; display: block; margin-top: 4px"
+            >
+              This system prompt will be prepended to new chat conversations.
+            </span>
+          </div>
+
+          <div class="form-row">
+            <div class="form-field">
+              <label for="reasoning-enabled">Enable Reasoning</label>
+              <select id="reasoning-enabled">
+                <option value="false">Disabled</option>
+                <option value="true">Enabled</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label for="reasoning-effort">Reasoning Effort</label>
+              <select id="reasoning-effort">
+                <option value="low">Low</option>
+                <option value="medium" selected>Medium</option>
+                <option value="high">High</option>
+              </select>
             </div>
           </div>
 
