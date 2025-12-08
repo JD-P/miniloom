@@ -80,6 +80,7 @@ let currentEditingSampler = null;
 let originalServiceData = null;
 let originalSamplerData = null;
 let activeTab = null;
+let previousSamplingMethod = null;
 
 // Utility functions
 function flashSaved(message, type = "success") {
@@ -167,30 +168,53 @@ function populateServiceForm(serviceName = null, serviceData = null) {
     // Editing existing service
     currentEditingService = serviceName;
     setValue("service-name", serviceName);
-    setValue("sampling-method", serviceData["sampling-method"] || "base");
+    setValue("sampling-method", serviceData["sampling-method"] || "openai");
     setValue("service-api-url", serviceData["service-api-url"] || "");
     setValue("service-model-name", serviceData["service-model-name"] || "");
     setValue("service-api-delay", serviceData["service-api-delay"] || "");
     setDisplay("delete-service-btn", true);
     originalServiceData = { ...serviceData };
+    previousSamplingMethod = serviceData["sampling-method"] || "openai";
   } else {
     // Adding new service
     currentEditingService = null;
     setValue("service-name", "");
-    setValue("sampling-method", "base");
+    setValue("sampling-method", "openai");
     setValue("service-api-url", "");
     setValue("service-model-name", "");
     setValue("service-api-delay", "");
     setDisplay("delete-service-btn", false);
     originalServiceData = null;
+    previousSamplingMethod = "openai";
   }
 }
 
 function applyServiceDefaultsToForm(serviceType) {
-  const defaults = applyServiceDefaults(serviceType);
-  setValue("service-api-url", defaults["service-api-url"]);
-  setValue("service-model-name", defaults["service-model-name"]);
-  setValue("service-api-delay", defaults["service-api-delay"]);
+  const newDefaults = applyServiceDefaults(serviceType);
+  const previousDefaults = previousSamplingMethod
+    ? applyServiceDefaults(previousSamplingMethod)
+    : null;
+
+  const fieldsToUpdate = [
+    "service-api-url",
+    "service-model-name",
+    "service-api-delay",
+  ];
+
+  fieldsToUpdate.forEach(fieldId => {
+    const currentValue = getValue(fieldId);
+    // A field is considered at default if it's empty or matches the previous method's default
+    const previousDefault = previousDefaults ? previousDefaults[fieldId] : "";
+    const isAtDefault = currentValue === "" || currentValue === previousDefault;
+
+    // Only update if the field is at its default value
+    if (isAtDefault) {
+      setValue(fieldId, newDefaults[fieldId]);
+    }
+  });
+
+  // Update the previous sampling method tracker
+  previousSamplingMethod = serviceType;
 }
 
 function saveService() {
