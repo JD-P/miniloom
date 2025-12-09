@@ -391,15 +391,32 @@ function saveSampler() {
     return;
   }
 
+  // Required fields: branches and tokens must have values
   if (
     !utils.validateFieldStringType(branches, "intType") ||
-    !utils.validateFieldStringType(tokens, "intType") ||
-    !utils.validateFieldStringType(temp, "floatType") ||
-    !utils.validateFieldStringType(topP, "floatType") ||
-    !utils.validateFieldStringType(topK, "intType") ||
-    !utils.validateFieldStringType(penalty, "floatType")
+    !utils.validateFieldStringType(tokens, "intType")
   ) {
-    alert("Please check your input values. Some fields have invalid formats.");
+    alert(
+      "Output Branches and Tokens Per Branch are required and must be integers."
+    );
+    return;
+  }
+
+  // Optional fields: validate only if they have values (empty is allowed)
+  if (temp !== "" && !utils.validateFieldStringType(temp, "floatType")) {
+    alert("Temperature must be a valid number or left empty.");
+    return;
+  }
+  if (topP !== "" && !utils.validateFieldStringType(topP, "floatType")) {
+    alert("Top-P must be a valid number or left empty.");
+    return;
+  }
+  if (topK !== "" && !utils.validateFieldStringType(topK, "intType")) {
+    alert("Top-K must be a valid integer or left empty.");
+    return;
+  }
+  if (penalty !== "" && !utils.validateFieldStringType(penalty, "floatType")) {
+    alert("Repetition Penalty must be a valid number or left empty.");
     return;
   }
 
