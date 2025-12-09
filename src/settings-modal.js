@@ -176,16 +176,18 @@ function populateServiceForm(serviceName = null, serviceData = null) {
     originalServiceData = { ...serviceData };
     previousSamplingMethod = serviceData["sampling-method"] || "openai";
   } else {
-    // Adding new service
+    // Adding new service - populate with defaults for the initial sampling method
     currentEditingService = null;
+    const initialMethod = "openai";
+    const defaults = applyServiceDefaults(initialMethod);
     setValue("service-name", "");
-    setValue("sampling-method", "openai");
-    setValue("service-api-url", "");
-    setValue("service-model-name", "");
-    setValue("service-api-delay", "");
+    setValue("sampling-method", initialMethod);
+    setValue("service-api-url", defaults["service-api-url"]);
+    setValue("service-model-name", defaults["service-model-name"]);
+    setValue("service-api-delay", defaults["service-api-delay"]);
     setDisplay("delete-service-btn", false);
     originalServiceData = null;
-    previousSamplingMethod = "openai";
+    previousSamplingMethod = initialMethod;
   }
 }
 
