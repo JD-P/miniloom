@@ -123,9 +123,15 @@ class APIClient {
       prompt: prompt,
       max_tokens: Number(params.tokensPerBranch),
       n: Number(params.outputBranches),
-      temperature: Number(params.temperature),
-      top_p: Number(params.topP),
     };
+
+    // Only include optional parameters if they have values
+    if (params.temperature != null) {
+      requestBody.temperature = Number(params.temperature);
+    }
+    if (params.topP != null) {
+      requestBody.top_p = Number(params.topP);
+    }
 
     const response = await HTTPClient.makeRequest(endpoint, {
       headers,
@@ -148,9 +154,15 @@ class APIClient {
       messages: [{ role: "system", content: prompt }],
       model: params.modelName,
       max_completion_tokens: params.tokensPerBranch,
-      temperature: params.temperature,
-      top_p: params.topP,
     };
+
+    // Only include optional parameters if they have values
+    if (params.temperature != null) {
+      requestBody.temperature = Number(params.temperature);
+    }
+    if (params.topP != null) {
+      requestBody.top_p = Number(params.topP);
+    }
 
     const response = await HTTPClient.makeRequest(endpoint, {
       headers,
@@ -178,12 +190,22 @@ class APIClient {
         prompt: prompt,
         max_tokens: Number(params.tokensPerBranch),
         n: 1,
-        temperature: Number(params.temperature),
-        top_p: Number(params.topP),
-        top_k: Number(params.topK),
-        repetition_penalty: Number(params.repetitionPenalty),
         provider: { require_parameters: true },
       };
+
+      // Only include optional parameters if they have values
+      if (params.temperature != null) {
+        body.temperature = Number(params.temperature);
+      }
+      if (params.topP != null) {
+        body.top_p = Number(params.topP);
+      }
+      if (params.topK != null) {
+        body.top_k = Number(params.topK);
+      }
+      if (params.repetitionPenalty != null) {
+        body.repetition_penalty = Number(params.repetitionPenalty);
+      }
 
       const promise = HTTPClient.delay(apiDelay * i)
         .then(() => {
@@ -229,11 +251,21 @@ class APIClient {
         model: params.modelName,
         messages: messages,
         max_tokens: Number(params.tokensPerBranch),
-        temperature: Number(params.temperature),
-        top_p: Number(params.topP),
-        top_k: Number(params.topK),
-        repetition_penalty: Number(params.repetitionPenalty),
       };
+
+      // Only include optional parameters if they have values
+      if (params.temperature != null) {
+        body.temperature = Number(params.temperature);
+      }
+      if (params.topP != null) {
+        body.top_p = Number(params.topP);
+      }
+      if (params.topK != null) {
+        body.top_k = Number(params.topK);
+      }
+      if (params.repetitionPenalty != null) {
+        body.repetition_penalty = Number(params.repetitionPenalty);
+      }
 
       const promise = HTTPClient.delay(apiDelay * i)
         .then(() => {
@@ -277,11 +309,21 @@ class APIClient {
         prompt: prompt,
         max_tokens: Number(params.tokensPerBranch),
         n: 1,
-        temperature: Number(params.temperature),
-        top_p: Number(params.topP),
-        top_k: Number(params.topK),
-        repetition_penalty: Number(params.repetitionPenalty),
       };
+
+      // Only include optional parameters if they have values
+      if (params.temperature != null) {
+        body.temperature = Number(params.temperature);
+      }
+      if (params.topP != null) {
+        body.top_p = Number(params.topP);
+      }
+      if (params.topK != null) {
+        body.top_k = Number(params.topK);
+      }
+      if (params.repetitionPenalty != null) {
+        body.repetition_penalty = Number(params.repetitionPenalty);
+      }
 
       const promise = HTTPClient.delay(apiDelay * i)
         .then(() => {
@@ -326,9 +368,15 @@ class APIClient {
         model: params.modelName,
         messages: [{ role: "user", content: prompt }],
         max_tokens: Number(params.tokensPerBranch),
-        temperature: Number(params.temperature),
-        top_p: Number(params.topP),
       };
+
+      // Only include optional parameters if they have values
+      if (params.temperature != null) {
+        requestBody.temperature = Number(params.temperature);
+      }
+      if (params.topP != null) {
+        requestBody.top_p = Number(params.topP);
+      }
 
       const promise = HTTPClient.delay(apiDelay * i)
         .then(() => {
@@ -365,6 +413,21 @@ class APIClient {
     const calls = params.outputBranches;
 
     for (let i = 1; i <= calls; i++) {
+      const generationConfig = {
+        maxOutputTokens: Number(params.tokensPerBranch),
+      };
+
+      // Only include optional parameters if they have values
+      if (params.temperature != null) {
+        generationConfig.temperature = Number(params.temperature);
+      }
+      if (params.topP != null) {
+        generationConfig.topP = Number(params.topP);
+      }
+      if (params.topK != null) {
+        generationConfig.topK = Number(params.topK);
+      }
+
       const requestBody = {
         contents: [
           {
@@ -375,12 +438,7 @@ class APIClient {
             ],
           },
         ],
-        generationConfig: {
-          maxOutputTokens: Number(params.tokensPerBranch),
-          temperature: Number(params.temperature),
-          topP: Number(params.topP),
-          topK: Number(params.topK),
-        },
+        generationConfig: generationConfig,
       };
 
       const promise = HTTPClient.delay(apiDelay * i)
@@ -448,21 +506,34 @@ class LLMService {
     const apiKey =
       samplerSettingsStore["api-keys"]?.[settings.selectedApiKeyName] || "";
 
+    // Helper to parse numeric values, returning null for empty/invalid values
+    const parseIntOrNull = value => {
+      if (value === "" || value === null || value === undefined) return null;
+      const parsed = parseInt(value);
+      return isNaN(parsed) ? null : parsed;
+    };
+
+    const parseFloatOrNull = value => {
+      if (value === "" || value === null || value === undefined) return null;
+      const parsed = parseFloat(value);
+      return isNaN(parsed) ? null : parsed;
+    };
+
     return {
       // Service parameters
-      samplingMethod: serviceData["sampling-method"] || "base",
+      samplingMethod: serviceData["sampling-method"] || "openai",
       apiUrl: serviceData["service-api-url"] || "",
       modelName: serviceData["service-model-name"] || "",
-      apiDelay: parseInt(serviceData["service-api-delay"]) || 3000,
+      apiDelay: parseIntOrNull(serviceData["service-api-delay"]) ?? 3000,
       apiKey: apiKey,
 
-      // Sampler parameters
-      outputBranches: parseInt(samplerData["output-branches"]) || 2,
-      tokensPerBranch: parseInt(samplerData["tokens-per-branch"]) || 256,
-      temperature: parseFloat(samplerData["temperature"]) || 0.9,
-      topP: parseFloat(samplerData["top-p"]) || 1,
-      topK: parseInt(samplerData["top-k"]) || 100,
-      repetitionPenalty: parseFloat(samplerData["repetition-penalty"]) || 1,
+      // Sampler parameters - preserve null for empty values so they can be omitted from API calls
+      outputBranches: parseIntOrNull(samplerData["output-branches"]) ?? 2,
+      tokensPerBranch: parseIntOrNull(samplerData["tokens-per-branch"]) ?? 256,
+      temperature: parseFloatOrNull(samplerData["temperature"]),
+      topP: parseFloatOrNull(samplerData["top-p"]),
+      topK: parseIntOrNull(samplerData["top-k"]),
+      repetitionPenalty: parseFloatOrNull(samplerData["repetition-penalty"]),
 
       // Chat completion settings
       systemPrompt: samplerData["system-prompt"] || "",
@@ -685,11 +756,21 @@ class LLMService {
             model: params.modelName,
             messages: chatData.messages,
             max_tokens: Number(params.tokensPerBranch),
-            temperature: Number(params.temperature),
-            top_p: Number(params.topP),
-            top_k: Number(params.topK),
-            repetition_penalty: Number(params.repetitionPenalty),
           };
+
+          // Only include optional parameters if they have values
+          if (params.temperature != null) {
+            body.temperature = Number(params.temperature);
+          }
+          if (params.topP != null) {
+            body.top_p = Number(params.topP);
+          }
+          if (params.topK != null) {
+            body.top_k = Number(params.topK);
+          }
+          if (params.repetitionPenalty != null) {
+            body.repetition_penalty = Number(params.repetitionPenalty);
+          }
 
           // Add reasoning parameters if enabled (for models that support it)
           if (params.reasoningEnabled) {
@@ -1001,14 +1082,22 @@ class LLMService {
   }
 
   buildChatRequestBody(chatData, params) {
-    return {
+    const body = {
       model: params.modelName,
       messages: chatData.messages,
       max_completion_tokens: parseInt(params.tokensPerBranch),
-      temperature: parseFloat(params.temperature),
-      top_p: parseFloat(params.topP),
       n: parseInt(params.outputBranches),
     };
+
+    // Only include optional parameters if they have values
+    if (params.temperature != null) {
+      body.temperature = Number(params.temperature);
+    }
+    if (params.topP != null) {
+      body.top_p = Number(params.topP);
+    }
+
+    return body;
   }
 
   buildChatRequestHeaders(params) {

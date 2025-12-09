@@ -91,7 +91,6 @@
                 <option value="together">Together API</option>
                 <option value="anthropic">Anthropic Claude</option>
                 <option value="google">Google Gemini</option>
-                <option value="base">Custom</option>
               </select>
             </div>
             <div class="form-field">
@@ -188,12 +187,12 @@
               />
             </div>
             <div class="form-field">
-              <label for="temperature">Temperature</label>
+              <label for="temperature">Temperature (optional)</label>
               <input
                 type="text"
                 id="temperature"
                 class="floatType"
-                placeholder="0.9"
+                placeholder="e.g. 0.9 or leave empty"
               />
             </div>
           </div>
@@ -209,23 +208,35 @@
               />
             </div>
             <div class="form-field">
-              <label for="top-p">Top-P</label>
-              <input type="text" id="top-p" class="floatType" placeholder="1" />
+              <label for="top-p">Top-P (optional)</label>
+              <input
+                type="text"
+                id="top-p"
+                class="floatType"
+                placeholder="e.g. 1 or leave empty"
+              />
             </div>
           </div>
 
           <div class="form-row">
             <div class="form-field">
-              <label for="top-k">Top-K</label>
-              <input type="text" id="top-k" class="intType" placeholder="100" />
+              <label for="top-k">Top-K (optional)</label>
+              <input
+                type="text"
+                id="top-k"
+                class="intType"
+                placeholder="e.g. 100 or leave empty"
+              />
             </div>
             <div class="form-field">
-              <label for="repetition-penalty">Repetition Penalty</label>
+              <label for="repetition-penalty"
+                >Repetition Penalty (optional)</label
+              >
               <input
                 type="text"
                 id="repetition-penalty"
                 class="floatType"
-                placeholder="1"
+                placeholder="e.g. 1 or leave empty"
               />
             </div>
           </div>
