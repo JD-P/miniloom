@@ -703,19 +703,25 @@ let mathJaxQueue = [];
 let mathJaxTimeout = null;
 let mathJaxRenderGeneration = 0;
 
-async function waitForMathJax() {
-  // Wait for MathJax to be fully loaded
-  if (
-    window.MathJax &&
-    window.MathJax.startup &&
-    window.MathJax.startup.promise
-  ) {
-    await window.MathJax.startup.promise;
-    return true;
-  }
-  // Fallback: check if typesetPromise exists
-  if (window.MathJax && window.MathJax.typesetPromise) {
-    return true;
+async function waitForMathJax(maxRetries = 20, retryDelay = 100) {
+  // Wait for MathJax to be fully loaded, with retry mechanism
+  for (let i = 0; i < maxRetries; i++) {
+    if (
+      window.MathJax &&
+      window.MathJax.startup &&
+      window.MathJax.startup.promise
+    ) {
+      await window.MathJax.startup.promise;
+      return true;
+    }
+    // Fallback: check if typesetPromise exists
+    if (window.MathJax && window.MathJax.typesetPromise) {
+      return true;
+    }
+    // Wait and retry if MathJax isn't loaded yet
+    if (i < maxRetries - 1) {
+      await new Promise(resolve => setTimeout(resolve, retryDelay));
+    }
   }
   return false;
 }
