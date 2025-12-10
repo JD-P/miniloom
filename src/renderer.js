@@ -166,7 +166,9 @@ function isChatCompletionMethod() {
     const params = llmService.prepareGenerationParams();
     return (
       params.samplingMethod === "openai-chat" ||
-      params.samplingMethod === "openrouter-chat"
+      params.samplingMethod === "openrouter-chat" ||
+      params.samplingMethod === "anthropic" ||
+      params.samplingMethod === "google"
     );
   } catch (error) {
     return false;
