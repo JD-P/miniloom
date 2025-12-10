@@ -43,8 +43,8 @@ When you first open MiniLoom, the app will automatically detect that you're a ne
    - Choose a service type (OpenRouter is recommended for beginners)
    - Fill in the required details:
      - **Service Name**: Give it a memorable name (e.g., "My OpenRouter")
-     - **API URL**: Usually pre-filled for popular services
-     - **Model Name**: Choose a model (e.g., "deepseek/deepseek-v3-base:free" for OpenRouter)
+     - **API URL**: Attempts to prefill based on the sampling method, stops prefilling if you change from default.
+     - **Model Name**: Choose a model (e.g., "moonshotai/kimi-k2-thinking" for OpenRouter).
    - Click "Save"
 
 2. **Add an API Key** (Required for most services)
