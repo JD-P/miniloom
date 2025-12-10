@@ -638,16 +638,19 @@ function renderMarkdown(text) {
   });
 
   // Protect $...$ inline math (single line only to avoid false positives)
-  textStr = textStr.replace(/(?<!\$)\$([^$\n]+?)\$(?!\$)/g, (match, formula) => {
-    const placeholder = `%%MATH_INLINE_${placeholderIndex}%%`;
-    mathPlaceholders.push({
-      placeholder,
-      type: "inline",
-      formula: formula.trim(),
-    });
-    placeholderIndex++;
-    return placeholder;
-  });
+  textStr = textStr.replace(
+    /(?<!\$)\$([^$\n]+?)\$(?!\$)/g,
+    (match, formula) => {
+      const placeholder = `%%MATH_INLINE_${placeholderIndex}%%`;
+      mathPlaceholders.push({
+        placeholder,
+        type: "inline",
+        formula: formula.trim(),
+      });
+      placeholderIndex++;
+      return placeholder;
+    }
+  );
 
   // Render markdown
   let html;
@@ -702,7 +705,11 @@ let mathJaxRenderGeneration = 0;
 
 async function waitForMathJax() {
   // Wait for MathJax to be fully loaded
-  if (window.MathJax && window.MathJax.startup && window.MathJax.startup.promise) {
+  if (
+    window.MathJax &&
+    window.MathJax.startup &&
+    window.MathJax.startup.promise
+  ) {
     await window.MathJax.startup.promise;
     return true;
   }
@@ -751,7 +758,9 @@ function queueMathJaxTypesetting() {
 
       if (validElements.length > 0) {
         // Mark elements as being processed
-        validElements.forEach(el => el.setAttribute("data-mathjax-pending", "true"));
+        validElements.forEach(el =>
+          el.setAttribute("data-mathjax-pending", "true")
+        );
 
         try {
           // Check generation again before typesetting
@@ -2404,6 +2413,15 @@ async function init() {
 
     // Check for new user setup
     checkForNewUser();
+
+    // After restoring last used settings, update chat toggle visibility
+    // This ensures the chat interface loads if the last used service was a chat model
+    if (isChatCompletionMethod()) {
+      updateChatToggleVisibility();
+      // If it's a chat method, switch to chat mode
+      chatViewMode = "chat";
+      updateViewMode();
+    }
   } catch (error) {
     console.error("Initialization failed:", error);
   }

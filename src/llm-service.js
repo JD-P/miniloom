@@ -655,10 +655,8 @@ class LLMService {
         this.generateWithOpenRouterChat(nodeId, capturedSettings),
       together: () =>
         this.generateWithProvider(nodeId, "together", capturedSettings),
-      anthropic: () =>
-        this.generateWithProvider(nodeId, "anthropic", capturedSettings),
-      google: () =>
-        this.generateWithProvider(nodeId, "google", capturedSettings),
+      anthropic: () => this.generateWithAnthropicChat(nodeId, capturedSettings),
+      google: () => this.generateWithGoogleChat(nodeId, capturedSettings),
     };
 
     const method = methodMap[samplingMethod] || methodMap["base"];
@@ -817,6 +815,227 @@ class LLMService {
             this.getLastChildIndex(rollFocus),
             capturedSettings
           );
+        }
+
+        return []; // Chat responses are processed separately
+      },
+      capturedSettings
+    );
+  }
+
+  async generateWithAnthropicChat(nodeId, capturedSettings = null) {
+    await this.executeGeneration(
+      nodeId,
+      async signal => {
+        const params = this.prepareGenerationParams(capturedSettings);
+        const loomTree = this.dataProvider.getLoomTree();
+        const rollFocus = loomTree.nodeStore[nodeId];
+        const promptText = loomTree.renderNode(rollFocus);
+
+        const chatData = this.parseChatData(promptText, params.systemPrompt);
+        const apiDelay = Number(params.apiDelay || 0);
+
+        const batchPromises = [];
+        const calls = params.outputBranches;
+
+        // Anthropic requires system message to be separate from messages array
+        let systemContent = "";
+        const messagesWithoutSystem = chatData.messages.filter(msg => {
+          if (msg.role === "system") {
+            systemContent = msg.content;
+            return false;
+          }
+          return true;
+        });
+
+        for (let i = 1; i <= calls; i++) {
+          const requestBody = {
+            model: params.modelName,
+            messages: messagesWithoutSystem,
+            max_tokens: Number(params.tokensPerBranch),
+          };
+
+          // Add system prompt if present
+          if (systemContent) {
+            requestBody.system = systemContent;
+          }
+
+          // Only include optional parameters if they have values
+          if (params.temperature != null) {
+            requestBody.temperature = Number(params.temperature);
+          }
+          if (params.topP != null) {
+            requestBody.top_p = Number(params.topP);
+          }
+
+          const promise = HTTPClient.delay(apiDelay * i).then(() => {
+            // Check if aborted before making request
+            if (signal && signal.aborted) {
+              throw new DOMException("Aborted", "AbortError");
+            }
+
+            const headers = {
+              "Content-Type": "application/json",
+              "x-api-key": params.apiKey,
+              "anthropic-version": "2023-06-01",
+            };
+
+            return HTTPClient.makeRequest(
+              params.apiUrl,
+              {
+                headers,
+                body: requestBody,
+              },
+              signal
+            );
+          });
+
+          batchPromises.push(promise);
+        }
+
+        const responses = await Promise.all(batchPromises);
+
+        // Process all responses - convert Anthropic format to standard chat format
+        for (const response of responses) {
+          // Anthropic returns { content: [{ type: "text", text: "..." }], stop_reason: "...", ... }
+          const responseData = {
+            choices: [
+              {
+                message: {
+                  role: "assistant",
+                  content: response.content[0].text,
+                },
+                finish_reason: response.stop_reason,
+              },
+            ],
+            model: response.model,
+          };
+
+          await this.processChatResponses(
+            responseData,
+            chatData,
+            rollFocus,
+            this.getLastChildIndex(rollFocus),
+            capturedSettings
+          );
+        }
+
+        return []; // Chat responses are processed separately
+      },
+      capturedSettings
+    );
+  }
+
+  async generateWithGoogleChat(nodeId, capturedSettings = null) {
+    await this.executeGeneration(
+      nodeId,
+      async signal => {
+        const params = this.prepareGenerationParams(capturedSettings);
+        const loomTree = this.dataProvider.getLoomTree();
+        const rollFocus = loomTree.nodeStore[nodeId];
+        const promptText = loomTree.renderNode(rollFocus);
+
+        const chatData = this.parseChatData(promptText, params.systemPrompt);
+        const apiDelay = Number(params.apiDelay || 0);
+
+        const batchPromises = [];
+        const calls = params.outputBranches;
+
+        // Convert ChatML messages to Google's format
+        // Google uses "user" and "model" roles, and "parts" array
+        let systemInstruction = null;
+        const googleContents = [];
+
+        for (const msg of chatData.messages) {
+          if (msg.role === "system") {
+            systemInstruction = msg.content;
+          } else {
+            googleContents.push({
+              role: msg.role === "assistant" ? "model" : "user",
+              parts: [{ text: msg.content }],
+            });
+          }
+        }
+
+        for (let i = 1; i <= calls; i++) {
+          const generationConfig = {
+            maxOutputTokens: Number(params.tokensPerBranch),
+          };
+
+          // Only include optional parameters if they have values
+          if (params.temperature != null) {
+            generationConfig.temperature = Number(params.temperature);
+          }
+          if (params.topP != null) {
+            generationConfig.topP = Number(params.topP);
+          }
+          if (params.topK != null) {
+            generationConfig.topK = Number(params.topK);
+          }
+
+          const requestBody = {
+            contents: googleContents,
+            generationConfig: generationConfig,
+          };
+
+          // Add system instruction if present
+          if (systemInstruction) {
+            requestBody.systemInstruction = {
+              parts: [{ text: systemInstruction }],
+            };
+          }
+
+          const promise = HTTPClient.delay(apiDelay * i).then(() => {
+            // Check if aborted before making request
+            if (signal && signal.aborted) {
+              throw new DOMException("Aborted", "AbortError");
+            }
+
+            const headers = {
+              "Content-Type": "application/json",
+              "X-goog-api-key": params.apiKey,
+            };
+
+            return HTTPClient.makeRequest(
+              params.apiUrl,
+              {
+                headers,
+                body: requestBody,
+              },
+              signal
+            );
+          });
+
+          batchPromises.push(promise);
+        }
+
+        const responses = await Promise.all(batchPromises);
+
+        // Process all responses - convert Google format to standard chat format
+        for (const response of responses) {
+          // Google returns { candidates: [{ content: { parts: [{ text: "..." }] }, finishReason: "..." }] }
+          for (const candidate of response.candidates) {
+            const responseData = {
+              choices: [
+                {
+                  message: {
+                    role: "assistant",
+                    content: candidate.content.parts[0].text,
+                  },
+                  finish_reason: candidate.finishReason || "stop",
+                },
+              ],
+              model: response.model || params.modelName,
+            };
+
+            await this.processChatResponses(
+              responseData,
+              chatData,
+              rollFocus,
+              this.getLastChildIndex(rollFocus),
+              capturedSettings
+            );
+          }
         }
 
         return []; // Chat responses are processed separately
