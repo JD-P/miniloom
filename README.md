@@ -23,6 +23,14 @@ but a more useful point of comparison for most users might be something like [Si
 
 ## Getting Started
 
+### Downloads
+
+[<img src="assets/windows_logo.png" width="50" height="50">](https://github.com/JD-P/miniloom/releases/download/v1.0.0/windows-2022-build.zip)
+[<img src="assets/Apple_logo_black.png" width="50" height="50">](https://github.com/JD-P/miniloom/releases/download/v1.0.0/macos-latest-build.1.zip)
+[<img src="assets/Tux-simple.png" width="50" height="50"](https://github.com/JD-P/miniloom/releases/download/v1.0.0/ubuntu-latest-build.1.zip)
+
+[(Tux, the Linux penguin, design by Larry Ewing, using The GIMP.)](https://commons.wikimedia.org/wiki/File:Tux-simple.svg)
+
 ### First Time Setup
 
 When you first open MiniLoom, the app will automatically detect that you're a new user and open the Settings panel with a welcome message. Here's what you need to do to get started:
