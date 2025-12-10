@@ -10,9 +10,9 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "build": "npm run format:check && electron-builder",
-    "build:win": "npm run format:check && electron-builder --win",
-    "build:mac": "npm run format:check && electron-builder --mac",
-    "build:linux": "npm run format:check && electron-builder --linux",
+    "build:mac": "electron-builder --mac --publish=never",
+    "build:win": "electron-builder --win --publish=never",
+    "build:linux": "electron-builder --linux --publish=never",
     "dist": "npm run build",
     "pack": "electron-builder --dir"
   },
