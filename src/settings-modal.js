@@ -163,6 +163,31 @@ function populateServiceSelect() {
   populateSelect(serviceSelect, getServices(), "-- Select a service --");
 }
 
+function populateSummaryServiceSelect(
+  currentServiceName = null,
+  selectedValue = ""
+) {
+  const summaryServiceSelect = document.getElementById("summary-service");
+  if (!summaryServiceSelect) return;
+
+  summaryServiceSelect.innerHTML =
+    '<option value="">(Use this service)</option>';
+
+  const services = getServices();
+  Object.keys(services).forEach(name => {
+    // Don't show the current service being edited as an option (it's the default)
+    if (name !== currentServiceName) {
+      const option = document.createElement("option");
+      option.value = name;
+      option.textContent = name;
+      if (name === selectedValue) {
+        option.selected = true;
+      }
+      summaryServiceSelect.appendChild(option);
+    }
+  });
+}
+
 function populateServiceForm(serviceName = null, serviceData = null) {
   if (serviceName && serviceData) {
     // Editing existing service
@@ -172,6 +197,10 @@ function populateServiceForm(serviceName = null, serviceData = null) {
     setValue("service-api-url", serviceData["service-api-url"] || "");
     setValue("service-model-name", serviceData["service-model-name"] || "");
     setValue("service-api-delay", serviceData["service-api-delay"] || "");
+    populateSummaryServiceSelect(
+      serviceName,
+      serviceData["summary-service"] || ""
+    );
     setDisplay("delete-service-btn", true);
     originalServiceData = { ...serviceData };
     previousSamplingMethod = serviceData["sampling-method"] || "openai";
@@ -185,6 +214,7 @@ function populateServiceForm(serviceName = null, serviceData = null) {
     setValue("service-api-url", defaults["service-api-url"]);
     setValue("service-model-name", defaults["service-model-name"]);
     setValue("service-api-delay", defaults["service-api-delay"]);
+    populateSummaryServiceSelect(null, "");
     setDisplay("delete-service-btn", false);
     originalServiceData = null;
     previousSamplingMethod = initialMethod;
@@ -225,6 +255,7 @@ function saveService() {
   const url = getValue("service-api-url");
   const model = getValue("service-model-name");
   const delay = getValue("service-api-delay");
+  const summaryService = getValue("summary-service");
 
   if (!utils.validateFieldStringType(name, "modelNameType")) {
     alert(
@@ -249,6 +280,7 @@ function saveService() {
     "service-api-url": url,
     "service-model-name": model,
     "service-api-delay": delay,
+    "summary-service": summaryService,
   };
 
   services[name] = serviceData;
@@ -316,13 +348,15 @@ function checkServiceChanges() {
   const currentUrl = getValue("service-api-url");
   const currentModel = getValue("service-model-name");
   const currentDelay = getValue("service-api-delay");
+  const currentSummaryService = getValue("summary-service");
 
   return (
     currentName !== currentEditingService ||
     currentMethod !== originalServiceData["sampling-method"] ||
     currentUrl !== originalServiceData["service-api-url"] ||
     currentModel !== originalServiceData["service-model-name"] ||
-    currentDelay !== originalServiceData["service-api-delay"]
+    currentDelay !== originalServiceData["service-api-delay"] ||
+    currentSummaryService !== (originalServiceData["summary-service"] || "")
   );
 }
 

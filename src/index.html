@@ -9,9 +9,10 @@
       content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; script-src-elem 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src *; font-src 'self' data: blob:; worker-src 'self' blob:;"
     />
     <link rel="stylesheet" href="main.css" />
+    <!-- Highlight.js theme for syntax highlighting - using a dark theme to match code block styling -->
     <link
       rel="stylesheet"
-      href="../node_modules/highlight.js/styles/default.min.css"
+      href="../node_modules/highlight.js/styles/vs2015.min.css"
     />
     <script>
       window.MathJax = {
@@ -241,8 +242,13 @@
       ></div>
     </div>
     <script src="../node_modules/marked/lib/marked.umd.js"></script>
-    <!-- Note: highlight.js CommonJS module not compatible with browser - syntax highlighting disabled -->
-    <!-- To enable, use a CDN or bundled version of highlight.js -->
+    <!-- Highlight.js for syntax highlighting in code blocks (ES module with common languages) -->
+    <script type="module">
+      // Import highlight.js with common languages bundled
+      import hljs from "../node_modules/highlight.js/es/common.js";
+      // Make hljs available globally for the renderer
+      window.hljs = hljs;
+    </script>
     <script src="utils.js"></script>
     <script src="model.js"></script>
     <script src="llm-service.js"></script>

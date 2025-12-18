@@ -676,6 +676,10 @@ select {
   padding: 12px;
   overflow-x: auto;
   background-color: #1e1e1e;
+  /* Enable word wrapping for long lines */
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  word-break: break-word;
 }
 
 .chat-message-content .code-block code {
@@ -685,6 +689,35 @@ select {
   font-family: var(--font-family-mono);
   font-size: 13px;
   line-height: 1.5;
+  /* Inherit wrapping from pre */
+  white-space: inherit;
+  word-wrap: inherit;
+  word-break: inherit;
+}
+
+/* Ensure syntax highlighting colors are visible */
+.chat-message-content .code-block code.hljs {
+  background: transparent;
+  padding: 0;
+}
+
+/* Override hljs background to use our code-block styling */
+.chat-message-content .code-block .hljs {
+  background: transparent;
+}
+
+/* Add a code block header for language display when specified */
+.chat-message-content .code-block[data-language]::before {
+  content: attr(data-language);
+  display: block;
+  background-color: #333;
+  color: #999;
+  padding: 4px 12px;
+  font-size: 11px;
+  font-family: var(--font-family-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid #444;
 }
 
 .chat-message-content .math-inline {
