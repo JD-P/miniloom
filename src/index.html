@@ -242,13 +242,7 @@
       ></div>
     </div>
     <script src="../node_modules/marked/lib/marked.umd.js"></script>
-    <!-- Highlight.js for syntax highlighting in code blocks (ES module with common languages) -->
-    <script type="module">
-      // Import highlight.js with common languages bundled
-      import hljs from "../node_modules/highlight.js/es/common.js";
-      // Make hljs available globally for the renderer
-      window.hljs = hljs;
-    </script>
+    <!-- Highlight.js is loaded via preload.js and exposed through electronAPI -->
     <script src="utils.js"></script>
     <script src="model.js"></script>
     <script src="llm-service.js"></script>

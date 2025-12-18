@@ -723,37 +723,37 @@ function renderMarkdown(text) {
   return html;
 }
 
-// Highlight code blocks with retry mechanism for async hljs loading
-let highlightRetryCount = 0;
-const MAX_HIGHLIGHT_RETRIES = 10;
-
-function highlightCodeBlocks(retryDelay = 50) {
+// Highlight code blocks using the preload API
+function highlightCodeBlocks() {
   if (!DOM.chatMessages) return;
 
-  const codeBlocks = DOM.chatMessages.querySelectorAll("pre code:not(.hljs)");
+  const codeBlocks = DOM.chatMessages.querySelectorAll(
+    "pre code:not(.highlighted)"
+  );
   if (codeBlocks.length === 0) return;
 
-  if (window.hljs) {
-    // Reset retry count on success
-    highlightRetryCount = 0;
+  codeBlocks.forEach(block => {
+    try {
+      // Extract language from class name (e.g., "language-python" -> "python")
+      const langClass = Array.from(block.classList).find(c =>
+        c.startsWith("language-")
+      );
+      const language = langClass ? langClass.replace("language-", "") : null;
 
-    codeBlocks.forEach(block => {
-      try {
-        // Only highlight if not already highlighted
-        if (!block.classList.contains("hljs")) {
-          hljs.highlightElement(block);
-        }
-      } catch (e) {
-        console.warn("Error highlighting code block:", e);
+      // Get the text content to highlight
+      const code = block.textContent;
+
+      // Use the preload API to highlight the code
+      const highlighted = window.electronAPI.highlightCode(code, language);
+
+      if (highlighted) {
+        block.innerHTML = highlighted;
+        block.classList.add("highlighted", "hljs");
       }
-    });
-  } else if (highlightRetryCount < MAX_HIGHLIGHT_RETRIES) {
-    // hljs not loaded yet, retry after a delay
-    highlightRetryCount++;
-    setTimeout(() => highlightCodeBlocks(retryDelay * 1.5), retryDelay);
-  } else {
-    console.warn("highlight.js not available after max retries");
-  }
+    } catch (e) {
+      console.warn("Error highlighting code block:", e);
+    }
+  });
 }
 
 // Queue MathJax typesetting with debouncing to avoid conflicts
