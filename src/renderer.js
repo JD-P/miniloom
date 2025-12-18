@@ -542,6 +542,7 @@ const ALLOWED_HTML_TAGS = [
   "td",
   "a",
   "div",
+  "span", // Needed for math expressions (math-display, math-inline)
 ];
 
 // Sanitize HTML to only allow whitelisted tags
@@ -579,15 +580,21 @@ function sanitizeHtml(html) {
             node.removeAttribute("href");
           }
         }
-        // Keep class attribute for code blocks and divs
+        // Keep class attribute for code blocks, divs, and spans (for math)
         const keepClass =
-          tagName === "code" || tagName === "div" || tagName === "pre";
+          tagName === "code" ||
+          tagName === "div" ||
+          tagName === "pre" ||
+          tagName === "span";
+        // Keep style attribute for spans (needed for math-display)
+        const keepStyle = tagName === "span";
         Array.from(node.attributes).forEach(attr => {
           if (
             attr.name !== "href" &&
             attr.name !== "target" &&
             attr.name !== "rel" &&
-            !(keepClass && attr.name === "class")
+            !(keepClass && attr.name === "class") &&
+            !(keepStyle && attr.name === "style")
           ) {
             node.removeAttribute(attr.name);
           }
