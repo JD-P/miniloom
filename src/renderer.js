@@ -281,6 +281,10 @@ function updateViewMode() {
     return;
   }
 
+  // Save any pending edits before switching view modes
+  // This ensures user edits are preserved when switching between text and chat views
+  saveEditorToLeafNode();
+
   if (chatViewMode === "chat") {
     DOM.editor.style.display = "none";
     DOM.chatView.style.display = "flex";
@@ -470,9 +474,30 @@ function configureMarked() {
         // In marked v17+, code receives a token object
         const text =
           typeof token === "object" ? token.text || "" : String(token || "");
-        const lang = typeof token === "object" ? token.lang || "" : "";
+        let lang = typeof token === "object" ? token.lang || "" : "";
+
+        // Normalize common language aliases
+        const langAliases = {
+          python3: "python",
+          py: "python",
+          js: "javascript",
+          ts: "typescript",
+          sh: "bash",
+          shell: "bash",
+          zsh: "bash",
+          yml: "yaml",
+          html: "xml",
+          htm: "xml",
+        };
+        const normalizedLang = langAliases[lang.toLowerCase()] || lang;
+
         const escaped = escapeHtml(text);
-        return `<div class="code-block"><pre><code class="language-${lang}">${escaped}</code></pre></div>`;
+        // Add data-language attribute for CSS to display the language label
+        const langAttr = normalizedLang
+          ? ` data-language="${escapeHtml(lang)}"`
+          : "";
+        const langClass = normalizedLang ? `language-${normalizedLang}` : "";
+        return `<div class="code-block"${langAttr}><pre><code class="${langClass}">${escaped}</code></pre></div>`;
       },
     };
 
@@ -517,6 +542,7 @@ const ALLOWED_HTML_TAGS = [
   "td",
   "a",
   "div",
+  "span", // Needed for math expressions (math-display, math-inline)
 ];
 
 // Sanitize HTML to only allow whitelisted tags
@@ -554,15 +580,21 @@ function sanitizeHtml(html) {
             node.removeAttribute("href");
           }
         }
-        // Keep class attribute for code blocks and divs
+        // Keep class attribute for code blocks, divs, and spans (for math)
         const keepClass =
-          tagName === "code" || tagName === "div" || tagName === "pre";
+          tagName === "code" ||
+          tagName === "div" ||
+          tagName === "pre" ||
+          tagName === "span";
+        // Keep style attribute for spans (needed for math-display)
+        const keepStyle = tagName === "span";
         Array.from(node.attributes).forEach(attr => {
           if (
             attr.name !== "href" &&
             attr.name !== "target" &&
             attr.name !== "rel" &&
-            !(keepClass && attr.name === "class")
+            !(keepClass && attr.name === "class") &&
+            !(keepStyle && attr.name === "style")
           ) {
             node.removeAttribute(attr.name);
           }
@@ -696,6 +728,39 @@ function renderMarkdown(text) {
   }
 
   return html;
+}
+
+// Highlight code blocks using the preload API
+function highlightCodeBlocks() {
+  if (!DOM.chatMessages) return;
+
+  const codeBlocks = DOM.chatMessages.querySelectorAll(
+    "pre code:not(.highlighted)"
+  );
+  if (codeBlocks.length === 0) return;
+
+  codeBlocks.forEach(block => {
+    try {
+      // Extract language from class name (e.g., "language-python" -> "python")
+      const langClass = Array.from(block.classList).find(c =>
+        c.startsWith("language-")
+      );
+      const language = langClass ? langClass.replace("language-", "") : null;
+
+      // Get the text content to highlight
+      const code = block.textContent;
+
+      // Use the preload API to highlight the code
+      const highlighted = window.electronAPI.highlightCode(code, language);
+
+      if (highlighted) {
+        block.innerHTML = highlighted;
+        block.classList.add("highlighted", "hljs");
+      }
+    } catch (e) {
+      console.warn("Error highlighting code block:", e);
+    }
+  });
 }
 
 // Queue MathJax typesetting with debouncing to avoid conflicts
@@ -1161,18 +1226,8 @@ function renderChatView(options = {}) {
     }
   }, 0);
 
-  // Highlight code blocks
-  setTimeout(() => {
-    if (window.hljs && DOM.chatMessages) {
-      DOM.chatMessages.querySelectorAll("pre code").forEach(block => {
-        try {
-          hljs.highlightElement(block);
-        } catch (e) {
-          console.warn("Error highlighting code block:", e);
-        }
-      });
-    }
-  }, 100);
+  // Highlight code blocks with retry mechanism
+  highlightCodeBlocks();
 
   // Queue MathJax typesetting
   queueMathJaxTypesetting();
@@ -1461,6 +1516,35 @@ function rerollFromCurrentChat() {
 }
 
 // Removed updateChatMLFromUI - now using explicit save functions
+
+// Save current editor content to the focused leaf node
+// This ensures edits are preserved when switching views or before generation
+function saveEditorToLeafNode() {
+  if (!appState || !appState.focusedNode || !DOM.editor) {
+    return;
+  }
+
+  const node = appState.focusedNode;
+  const prompt = DOM.editor.value;
+
+  // Only save if this is a mutable leaf node (user/import type with no children)
+  if (
+    node.children.length === 0 &&
+    (node.type === "user" || node.type === "import")
+  ) {
+    // Update the node with the current editor content
+    appState.loomTree.updateNode(node, prompt, node.summary);
+
+    // Update search index
+    if (searchManager) {
+      try {
+        searchManager.updateNode(node, appState.loomTree.renderNode(node));
+      } catch (e) {
+        console.warn("Error updating search index during save:", e);
+      }
+    }
+  }
+}
 
 // Cancel ongoing chat generation
 function cancelChatGeneration() {
@@ -2297,6 +2381,10 @@ async function init() {
       toggleOptions.forEach(option => {
         option.addEventListener("click", () => {
           const mode = option.dataset.mode;
+
+          // Save pending edits before switching modes
+          saveEditorToLeafNode();
+
           chatViewMode = mode;
           toggleOptions.forEach(opt => opt.classList.remove("active"));
           option.classList.add("active");

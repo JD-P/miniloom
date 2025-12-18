@@ -579,7 +579,53 @@ class LLMService {
       return "Branch Error";
     }
 
-    const params = this.prepareGenerationParams(capturedSettings);
+    // Get params for the main service
+    const mainParams = this.prepareGenerationParams(capturedSettings);
+
+    // Check if a different summary service is configured
+    const samplerSettingsStore =
+      this.settingsProvider.getSamplerSettingsStore();
+    const settings =
+      capturedSettings || this.settingsProvider.getSamplerSettings();
+    const mainServiceData =
+      samplerSettingsStore.services?.[settings.selectedServiceName] || {};
+    const summaryServiceName = mainServiceData["summary-service"];
+
+    let params;
+    let usingSeparateSummaryService = false;
+
+    // If a summary service is configured and exists, use it
+    if (
+      summaryServiceName &&
+      samplerSettingsStore.services?.[summaryServiceName]
+    ) {
+      const summaryServiceData =
+        samplerSettingsStore.services[summaryServiceName];
+      const apiKey =
+        samplerSettingsStore["api-keys"]?.[settings.selectedApiKeyName] || "";
+
+      params = {
+        samplingMethod: summaryServiceData["sampling-method"] || "openai",
+        apiUrl: summaryServiceData["service-api-url"] || "",
+        modelName: summaryServiceData["service-model-name"] || "",
+        apiDelay: parseInt(summaryServiceData["service-api-delay"]) || 3000,
+        apiKey: apiKey,
+        // Use minimal settings for summaries
+        tokensPerBranch: 10,
+        outputBranches: 1,
+        temperature: null,
+        topP: null,
+        topK: null,
+        repetitionPenalty: null,
+        reasoningEnabled: false,
+        reasoningEffort: "low",
+      };
+      usingSeparateSummaryService = true;
+    } else {
+      // Use the main service for summaries
+      params = { ...mainParams };
+    }
+
     const endpoint = params.apiUrl;
 
     const summarizePromptTemplate =
@@ -615,24 +661,146 @@ class LLMService {
         ...params,
         tokensPerBranch: 10,
         outputBranches: 1,
+        // Disable reasoning for summary requests to avoid expensive reasoning operations
+        reasoningEnabled: false,
+        reasoningEffort: "low",
       };
 
       try {
-        const response = await APIClient.callProvider(
+        // First attempt: try with reasoning disabled
+        const response = await this.callSummaryProvider(
           samplingMethod,
           endpoint,
           prompt,
-          summaryParams
+          summaryParams,
+          false // disableReasoning = false means we just set reasoningEnabled: false
         );
-
         return window.utils.extractThreeWords(response[0].text);
       } catch (error) {
+        // If using the main service (not a separate summary service),
+        // the error might be because reasoning can't be disabled for this model
+        // Try again with low reasoning effort instead
+        if (
+          !usingSeparateSummaryService &&
+          this.isReasoningRelatedError(error)
+        ) {
+          console.warn(
+            "Summary with reasoning disabled failed, trying with low effort:",
+            error.message
+          );
+          try {
+            const response = await this.callSummaryProvider(
+              samplingMethod,
+              endpoint,
+              prompt,
+              {
+                ...summaryParams,
+                reasoningEnabled: true,
+                reasoningEffort: "low",
+              },
+              true // useLowEffortReasoning = true
+            );
+            return window.utils.extractThreeWords(response[0].text);
+          } catch (retryError) {
+            console.warn(
+              "Summary generation with low effort also failed:",
+              retryError
+            );
+            return "Branch Error";
+          }
+        }
         console.warn("Summary generation failed:", error);
         return "Branch Error";
       }
     } else {
       return "Branch Error";
     }
+  }
+
+  // Check if an error is related to reasoning parameters
+  isReasoningRelatedError(error) {
+    if (!error || !error.message) return false;
+    const msg = error.message.toLowerCase();
+    return (
+      msg.includes("reasoning") ||
+      msg.includes("parameter") ||
+      msg.includes("not supported") ||
+      msg.includes("invalid")
+    );
+  }
+
+  // Call a provider for summary generation with reasoning control
+  async callSummaryProvider(
+    samplingMethod,
+    endpoint,
+    prompt,
+    params,
+    useLowEffortReasoning
+  ) {
+    // For OpenRouter chat, we need special handling for reasoning
+    if (samplingMethod === "openrouter-chat") {
+      return this.callOpenRouterChatForSummary(
+        endpoint,
+        prompt,
+        params,
+        useLowEffortReasoning
+      );
+    }
+
+    // For other providers, just use the standard call
+    return APIClient.callProvider(samplingMethod, endpoint, prompt, params);
+  }
+
+  // Special handler for OpenRouter chat summaries with reasoning control
+  async callOpenRouterChatForSummary(
+    endpoint,
+    prompt,
+    params,
+    useLowEffortReasoning
+  ) {
+    const authToken = `Bearer ${params.apiKey}`;
+
+    const messages = [{ role: "user", content: prompt }];
+
+    const body = {
+      model: params.modelName,
+      messages: messages,
+      max_tokens: Number(params.tokensPerBranch),
+    };
+
+    // Only include optional parameters if they have values
+    if (params.temperature != null) {
+      body.temperature = Number(params.temperature);
+    }
+    if (params.topP != null) {
+      body.top_p = Number(params.topP);
+    }
+
+    // Handle reasoning parameters
+    if (useLowEffortReasoning) {
+      // Try with low effort reasoning
+      body.reasoning = {
+        enabled: true,
+        effort: "low",
+      };
+    }
+    // If not useLowEffortReasoning, we simply don't include the reasoning parameter
+    // This allows models without reasoning to work normally
+
+    const headers = {
+      accept: "application/json",
+      Authorization: authToken,
+      "HTTP-Referer": "https://github.com/JD-P/miniloom",
+      "X-Title": "MiniLoom",
+    };
+
+    const response = await HTTPClient.makeRequest(endpoint, { headers, body });
+
+    return response.choices.map(choice => ({
+      text: choice.message.content,
+      model: response.model,
+      finish_reason: choice.finish_reason,
+    }));
   }
 
   // Main generation entry point - now directly maps to provider methods

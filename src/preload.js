@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 const DiffMatchPatch = require("diff-match-patch");
 const MiniSearch = require("minisearch");
+const hljs = require("highlight.js");
 
 // Store MiniSearch instance in preload script
 let searchIndex = null;
@@ -126,5 +127,23 @@ contextBridge.exposeInMainWorld("electronAPI", {
       return true;
     }
     return false;
+  },
+
+  // Highlight.js methods for syntax highlighting
+  highlightCode: (code, language) => {
+    try {
+      if (language && hljs.getLanguage(language)) {
+        return hljs.highlight(code, { language }).value;
+      } else {
+        // Auto-detect language
+        return hljs.highlightAuto(code).value;
+      }
+    } catch (e) {
+      console.warn("Highlight.js error:", e);
+      return null;
+    }
+  },
+  getHighlightLanguages: () => {
+    return hljs.listLanguages();
   },
 });
